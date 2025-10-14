@@ -25,7 +25,7 @@ padding=20
 # Color format: <alpha><alpha><b><b><g><g><r><r>
 # Example: 370DE2 (RGB) > E20D37 (BGR) > &H00E20D37 (ASS)
 # You can convert any RGB value to BGR by swapping the first and last two characters. Just remember that the first two characters in an ASS color code represent the alpha channel.
-# Available Properties: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
+# Available Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
 my_style=Fontname:Cambria,Fontsize:50,PrimaryColour:&H00E20D37
 ```
 

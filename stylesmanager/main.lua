@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.1             ║
+║             v1.0.2             ║
 ╚════════════════════════════════╝
 
 ]]
@@ -66,7 +66,7 @@ local function getPath(key)
 
     local fullPath
     local hash       = hash(utils.split_path(mp.get_property("path")))
-    local configPath = os.getenv("APPDATA")
+    local configPath = os.getenv("temp")
     local configDir  = "mpvstylesmanager"
     local seperator  = "\\"
 
@@ -211,12 +211,12 @@ local function lastChanges(line)
 
     line = string.gsub(line, "(Colour)=([0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]),([0-9A-Fa-f][0-9A-Fa-f])", function(p, color, alpha)
 
-            return string.format("%s=&H%s%s&", p, alpha, convertColor(color, "RGB"))
+        return string.format("%s=&H%s%s&", p, alpha, convertColor(color, "RGB"))
     end)
 
     line = string.gsub(line, "(Scale[XY])=(%d+)", function(p, val)
 
-            return string.format("%s=%s", p, val / 100)
+        return string.format("%s=%s", p, val / 100)
     end)
 
     line = string.gsub(line, "(Alignment)=([4-9])", function(p, val)
@@ -243,7 +243,9 @@ local function getStyleOverrides()
 
     for i, v in pairs(styles.overrides) do
 
-        table.insert(overrides, lastChanges(serializeStyle(styles.original[tonumber(i)].Name, v)))
+        v = serializeStyle(styles.original[tonumber(i)].Name, v)
+
+        if v ~= "" then table.insert(overrides, lastChanges(v)) end
     end
 
     if #overrides == 0 then return "" end
@@ -251,9 +253,11 @@ local function getStyleOverrides()
     return table.concat(overrides, ",")
 end
 
-local function setStyleOverrides()
+local function applyStyleOverrides()
 
     local overrides = getStyleOverrides()
+
+    if overrides == mp.get_property("sub-ass-style-overrides", "") then return end
 
     mp.set_property("sub-ass-style-overrides", overrides)
 end
@@ -738,21 +742,22 @@ end
 
 local function handleEdit()
 
-    local property = styles.editable[index.editstyle]
+    local p = styles.editable[index.editstyle]
+    local i = tostring(index.styles)
 
     input.init()
 
     input.theme     = "black"
     input.font_size = config.font_size
 
-    if map[property] then map[property].setRange() end
+    if map[p] then map[p].setRange() end
 
-    if styles.overrides[tostring(index.styles)] and styles.overrides[tostring(index.styles)][property] then
+    if styles.overrides[i] and styles.overrides[i][p] then
 
-        input.default(tostring(styles.overrides[tostring(index.styles)][property]))
+        input.default(tostring(styles.overrides[i][p]))
     else
 
-        input.default(tostring(styles.original[index.styles][property]))
+        input.default(tostring(styles.original[tonumber(i)][p]))
     end
 
     unsetBindings("editstyle")
@@ -780,6 +785,33 @@ local function setScreenStyles()
     end
 end
 
+local function changeValue(newValue, property)
+
+    local p = property or styles.editable[index.editstyle]
+    local i = tostring(index.styles)
+
+    if newValue ~= nil then
+
+        if not styles.overrides[i] then styles.overrides[i] = {} end
+
+        if tostring(styles.original[index.styles][p]) == newValue then
+
+            styles.overrides[i][p] = nil
+        else
+
+            styles.overrides[i][p] = (map[p] and map[p].setValue) and map[p].setValue(newValue) or newValue
+        end
+    else
+
+        if styles.overrides[i] and styles.overrides[i][p] then
+
+            styles.overrides[i][p] = nil
+
+            if next(styles.overrides[i]) == nil then styles.overrides[i] = nil end
+        end
+    end
+end
+
 local function reset()
 
     styles.original  = {}
@@ -801,8 +833,6 @@ local function saveConfig()
 
         runCommand({"powershell", "-NoProfile", "-Command", "mkdir", configPath})
     end
-
-    if next(styles.overrides) == nil then return end
 
     local file
     local formattedOverrides = getStyleOverrides()
@@ -895,11 +925,11 @@ local function toggle(section)
         end
 
         readConfig("overridefile")
-
         render()
         setBindings(section)
     else
 
+        saveConfig()
         unsetBindings(section)
         updateOverlay("", 0, 0)
 
@@ -924,22 +954,9 @@ local function bindingList(section)
                 key  = "esc",
                 func = function ()
 
-                    saveConfig()
                     toggle("styles")
                 end,
                 opts = nil
-            },
-
-            nextitem = {
-
-                key  = "down",
-                func = function ()
-
-                    index.styles = math.min(index.styles + 1, #styles.original)
-
-                    render()
-                end,
-                opts = {repeatable = true}
             },
 
             previtem = {
@@ -948,6 +965,18 @@ local function bindingList(section)
                 func = function ()
 
                     index.styles = math.max(index.styles - 1, 1)
+
+                    render()
+                end,
+                opts = {repeatable = true}
+            },
+
+            nextitem = {
+
+                key  = "down",
+                func = function ()
+
+                    index.styles = math.min(index.styles + 1, #styles.original)
 
                     render()
                 end,
@@ -998,48 +1027,6 @@ local function bindingList(section)
         }
     elseif section == "editstyle" then
 
-        local loadDefaultStyle = function()
-
-            if config.my_style == "" then return end
-
-            local changed = false
-
-            for p, v in config.my_style:gmatch("([^:,]+):([^:,]+)") do
-
-                input.init()
-
-                input.font_size = config.font_size
-
-                if map[p] then
-
-                    map[p].setRange()
-
-                    v = map[p].getValue and map[p].getValue(v) or v
-
-                    if input.default(v) then
-
-                        changed = true
-
-                        if not styles.overrides[tostring(index.styles)] then styles.overrides[tostring(index.styles)] = {} end
-
-                        styles.overrides[tostring(index.styles)][p] = (map[p] and map[p].setValue) and map[p].setValue(input.get_text()) or input.get_text()
-                    else
-
-                        mp.msg["warn"](string.format("Value is out of allowed range: %s (%s)", v, p))
-                    end
-                else
-
-                    mp.msg["warn"](string.format("This property has no defined handler: %s", p))
-                end
-            end
-
-            if changed then
-
-                setStyleOverrides()
-                render()
-            end
-        end
-
         defaultBindings = {
 
             close = {
@@ -1047,22 +1034,9 @@ local function bindingList(section)
                 key  = "esc",
                 func = function ()
 
-                    saveConfig()
                     toggle("editstyle")
                 end,
                 opts = nil
-            },
-
-            nextitem = {
-
-                key  = "down",
-                func = function ()
-
-                    index.editstyle = math.min(index.editstyle + 1, #styles.editable)
-
-                    render()
-                end,
-                opts = {repeatable = true}
             },
 
             previtem = {
@@ -1071,6 +1045,18 @@ local function bindingList(section)
                 func = function ()
 
                     index.editstyle = math.max(index.editstyle - 1, 1)
+
+                    render()
+                end,
+                opts = {repeatable = true}
+            },
+
+            nextitem = {
+
+                key  = "down",
+                func = function ()
+
+                    index.editstyle = math.min(index.editstyle + 1, #styles.editable)
 
                     render()
                 end,
@@ -1086,7 +1072,7 @@ local function bindingList(section)
 
                     handleEdit()
                 end,
-                opts = {repeatable = true}
+                opts = nil
             },
 
             resetvalue = {
@@ -1094,19 +1080,11 @@ local function bindingList(section)
                 key  = "del",
                 func = function ()
 
-                    local property = styles.editable[index.editstyle]
-
-                    if styles.overrides[tostring(index.styles)] and styles.overrides[tostring(index.styles)][property] then
-
-                        styles.overrides[tostring(index.styles)][property] = nil
-
-                        if next(styles.overrides[tostring(index.styles)]) == nil then styles.overrides[tostring(index.styles)] = nil end
-
-                        setStyleOverrides()
-                        render()
-                    end
+                    changeValue(nil)
+                    applyStyleOverrides()
+                    render()
                 end,
-                opts = {repeatable = true}
+                opts = nil
             },
 
             resetall = {
@@ -1116,10 +1094,10 @@ local function bindingList(section)
 
                     styles.overrides[tostring(index.styles)] = nil
 
-                    setStyleOverrides()
+                    applyStyleOverrides()
                     render()
                 end,
-                opts = {repeatable = true}
+                opts = nil
             },
 
             loadefaultstyle = {
@@ -1127,19 +1105,44 @@ local function bindingList(section)
                 key  = "o",
                 func = function ()
 
-                    loadDefaultStyle()
+                    if config.my_style == "" then return end
+
+                    local changed = false
+
+                    for p, v in config.my_style:gmatch("([^:,]+):([^:,]+)") do
+
+                        input.init()
+
+                        input.font_size = config.font_size
+
+                        if map[p] then
+
+                            map[p].setRange()
+
+                            v = map[p].getValue and map[p].getValue(v) or v
+
+                            if input.default(v) then
+
+                                changed = true
+
+                                changeValue(input.get_text(), p)
+                            else
+
+                                mp.msg.warn(string.format("Value is out of allowed range: %s (%s)", v, p))
+                            end
+                        else
+
+                            mp.msg.warn(string.format("This property has no defined handler: %s", p))
+                        end
+                    end
+
+                    if changed then
+
+                        applyStyleOverrides()
+                        render()
+                    end
                 end,
-                opts = {repeatable = true}
-            },
-
-            loadefaultstylealt = {
-
-                key  = "O",
-                func = function ()
-
-                    loadDefaultStyle()
-                end,
-                opts = {repeatable = true}
+                opts = nil
             },
 
             backstyles = {
@@ -1154,7 +1157,7 @@ local function bindingList(section)
 
                     render()
                 end,
-                opts = {repeatable = true}
+                opts = nil
             },
 
             disableenter = {
@@ -1165,6 +1168,13 @@ local function bindingList(section)
                 end,
                 opts = nil
             },
+        }
+
+        defaultBindings["loadefaultstylealt"] = {
+
+            key  = "O",
+            func = defaultBindings["loadefaultstyle"].func,
+            opts = defaultBindings["loadefaultstyle"].opts
         }
     elseif section == "editvalue" then
 
@@ -1229,39 +1239,39 @@ local function bindingList(section)
 
                     unsetBindings("editvalue")
                     setBindings("editstyle")
-
-                    local property = styles.editable[index.editstyle]
-
-                    if not styles.overrides[tostring(index.styles)] then styles.overrides[tostring(index.styles)] = {} end
-
-                    if tostring(styles.original[index.styles][property]) == input.get_text() then
-
-                        styles.overrides[tostring(index.styles)][property] = nil
-                    else
-
-                        styles.overrides[tostring(index.styles)][property] = (map[property] and map[property].setValue) and map[property].setValue(input.get_text()) or input.get_text()
-                    end
-
-                    setStyleOverrides()
+                    changeValue(input.get_text())
+                    applyStyleOverrides()
                     render()
                 end,
                 opts = nil
             },
 
-            disabledown = {
+            previtem = {
 
-                key  = "down",
+                key  = "up",
                 func = function ()
 
+                    changeValue(input.get_text())
+                    applyStyleOverrides()
+
+                    index.editstyle = math.max(index.editstyle - 1, 1)
+
+                    handleEdit()
                 end,
                 opts = {repeatable = true}
             },
 
             disableup = {
 
-                key  = "up",
+                key  = "down",
                 func = function ()
 
+                    changeValue(input.get_text())
+                    applyStyleOverrides()
+
+                    index.editstyle = math.min(index.editstyle + 1, #styles.editable)
+
+                    handleEdit()
                 end,
                 opts = {repeatable = true}
             },
@@ -1290,6 +1300,11 @@ mp.observe_property("osd-dimensions", "native", function (_, value)
     end
 end)
 
+mp.observe_property("sid", "number", function(_, value)
+
+    if opened then toggle(page) end
+end)
+
 mp.register_event("file-loaded", function() readConfig("overridefile/converted") end)
 
-mp.add_key_binding(nil, "stylesmanager", function() toggle("styles") end)
+mp.add_key_binding(nil, "stylesmanager", function() toggle(page) end)

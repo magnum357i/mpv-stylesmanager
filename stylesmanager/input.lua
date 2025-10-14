@@ -114,37 +114,6 @@ end
 --after_changes, edit_clipboard(text)
 function input.bindings(hooks)
 
-    local paste = function()
-
-        local clipboard_text = get_clipboard()
-
-        if input.format ~= "" or input.accept_only ~= "" then
-
-            if hooks and hooks.edit_clipboard then clipboard_text = hooks.edit_clipboard(clipboard_text) end
-
-            if not validate(clipboard_text) then return end
-
-            text   = clipboard_text
-            cursor = utf8.len(text)
-
-            if hooks and hooks.after_changes then hooks.after_changes() end
-
-            return
-        end
-
-        local count = utf8.len(text)
-
-        if count >= input.max then return end
-
-        local pre_cursor  = cursor == 0 and "" or utf8.sub(text, 1, cursor)
-        local post_cursor = utf8.sub(text, cursor + 1, 0)
-        clipboard_text    = utf8.sub(clipboard_text, 1, input.max - count)
-        text              = pre_cursor..clipboard_text..post_cursor
-        cursor            = cursor + utf8.len(clipboard_text)
-
-        if hooks and hooks.after_changes then hooks.after_changes() end
-    end
-
     local list = {
 
         cursorhome = {
@@ -213,17 +182,33 @@ function input.bindings(hooks)
             key  = "ctrl+v",
             func = function ()
 
-                paste()
-            end,
-            opts = {repeatable = true}
-        },
+                local clipboard_text = get_clipboard()
 
-        pastealt = {
+                if input.format ~= "" or input.accept_only ~= "" then
 
-            key  = "ctrl+V",
-            func = function ()
+                    if hooks and hooks.edit_clipboard then clipboard_text = hooks.edit_clipboard(clipboard_text) end
 
-                paste()
+                    if not validate(clipboard_text) then return end
+
+                    text   = clipboard_text
+                    cursor = utf8.len(text)
+
+                    if hooks and hooks.after_changes then hooks.after_changes() end
+
+                    return
+                end
+
+                local count = utf8.len(text)
+
+                if count >= input.max then return end
+
+                local pre_cursor  = cursor == 0 and "" or utf8.sub(text, 1, cursor)
+                local post_cursor = utf8.sub(text, cursor + 1, 0)
+                clipboard_text    = utf8.sub(clipboard_text, 1, input.max - count)
+                text              = pre_cursor..clipboard_text..post_cursor
+                cursor            = cursor + utf8.len(clipboard_text)
+
+                if hooks and hooks.after_changes then hooks.after_changes() end
             end,
             opts = {repeatable = true}
         },
@@ -302,7 +287,13 @@ function input.bindings(hooks)
             end,
             opts = {repeatable = true, complex = true}
         }
+    }
 
+    list["pastealt"] = {
+
+        key  = "ctrl+V",
+        func = list["paste"].func,
+        opts = list["paste"].opts
     }
 
     return list
