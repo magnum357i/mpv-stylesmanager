@@ -2,21 +2,22 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.0             ║
+║             v1.0.1             ║
 ╚════════════════════════════════╝
 
 ]]
 
 local options = require 'mp.options'
 local utils   = require "mp.utils"
-local assline = require "assline"
 local assdraw = require "mp.assdraw"
+local assline = require "assline"
 local input   = require "input"
 local config  = {
 
     font_size      = 18,
     hint_font_size = 11,
-    padding        = 20
+    padding        = 20,
+    my_style       = ""
 }
 
 options.read_options(config, "stylesmanager")
@@ -136,6 +137,21 @@ local function fillData()
     data.borderSize                     = mp.get_property_number('osd-border-size')
     data.columns                        = {10, calculateTextWidth(string.rep("A", 13), config.font_size)}
     data.tab                            = string.rep("\\h", 4)
+    data.propertyNames                  = {
+
+        Fontname      = "Font",
+        Fontsize      = "Size",
+        PrimaryColour = "Color",
+        OutlineColour = "Border Color",
+        BackColour    = "Shadow Color",
+        ScaleX        = "Scale X",
+        ScaleY        = "Scale Y",
+        Outline       = "Border",
+        Alignment     = "Position",
+        MarginV       = "Vertical Align",
+        MarginL       = "Left Align",
+        MarginR       = "Right Align"
+    }
 end
 
 local function setStyles(metadata)
@@ -166,7 +182,7 @@ local function getEditableValues()
     return {
 
         "Fontname", "Fontsize",
-        "PrimaryColor", "OutlineColor", "ShadowColor",
+        "PrimaryColour", "OutlineColour", "BackColour",
         "Bold", "Italic",
         "ScaleX", "ScaleY", "Spacing",
         "Outline", "Shadow",
@@ -193,17 +209,17 @@ end
 
 local function lastChanges(line)
 
-    line = string.gsub(line, "Color=([0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]),([0-9A-Fa-f][0-9A-Fa-f])", function(color, alpha)
+    line = string.gsub(line, "(Colour)=([0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]),([0-9A-Fa-f][0-9A-Fa-f])", function(p, color, alpha)
 
-            return string.format("Colour=&H%s%s&", alpha, convertColor(color, "RGB"))
+            return string.format("%s=&H%s%s&", p, alpha, convertColor(color, "RGB"))
     end)
 
-    line = string.gsub(line, "(Scale[XY])=(%d+)", function(scale, val)
+    line = string.gsub(line, "(Scale[XY])=(%d+)", function(p, val)
 
-            return string.format("%s=%s", scale, val / 100)
+            return string.format("%s=%s", p, val / 100)
     end)
 
-    line = string.gsub(line, "Alignment=([4-9])", function(val)
+    line = string.gsub(line, "(Alignment)=([4-9])", function(p, val)
 
         local alignments = {
 
@@ -215,7 +231,7 @@ local function lastChanges(line)
             ["9"] = "7"
         }
 
-        return string.format("Alignment=%s", alignments[val])
+        return string.format("%s=%s", p, alignments[val])
     end)
 
     return line
@@ -238,8 +254,6 @@ end
 local function setStyleOverrides()
 
     local overrides = getStyleOverrides()
-
-    if overrides == "" then return end
 
     mp.set_property("sub-ass-style-overrides", overrides)
 end
@@ -323,7 +337,7 @@ local function generateMap()
             end
         },
 
-        PrimaryColor = {
+        PrimaryColour = {
 
             setRange = function()
 
@@ -340,7 +354,7 @@ local function generateMap()
             end
         },
 
-        OutlineColor = {
+        OutlineColour = {
 
             setRange = function()
 
@@ -357,7 +371,7 @@ local function generateMap()
             end
         },
 
-        ShadowColor = {
+        BackColour = {
 
             setRange = function()
 
@@ -564,14 +578,6 @@ local function render()
     local lineY = config.padding
     local ass   = assdraw.ass_new()
 
-    ass:new_event()
-    ass:an(7)
-    ass:pos(config.padding, lineY)
-    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-    ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s", "<LEFT-RIGHT> Back / Edit", "<UP-DOWN> Prev / Next Item", "<ENTER> Confirm", "<DEL> Revert to default", "<ESC> Exit"))
-
-    lineY = lineY + config.hint_font_size + config.padding
-
     if page == "styles" then
 
         ass:new_event()
@@ -604,12 +610,6 @@ local function render()
 
             lineY = lineY + config.font_size
         end
-
-        ass:new_event()
-        ass:an(7)
-        ass:pos(config.padding, lineY + config.padding)
-        ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.hint_font_size))
-        ass:append("Styles of the lines currently visible on screen will be highlighted in yellow.")
     elseif page == "editstyle" or page == "editvalue" then
 
         ass:new_event()
@@ -634,10 +634,10 @@ local function render()
 
             if i == index.editstyle then
 
-                ass:append(string.format("{\\b1}● %s%s{\\b0}", editedSymbol, name))
+                ass:append(string.format("{\\b1}● %s%s{\\b0}", editedSymbol, data.propertyNames[name] or name))
             else
 
-                ass:append(string.format("○ %s%s", editedSymbol, name))
+                ass:append(string.format("○ %s%s", editedSymbol, data.propertyNames[name] or name))
             end
 
             if page == "editstyle" or (page == "editvalue" and i ~= index.editstyle) then
@@ -686,6 +686,49 @@ local function render()
 
             lineY = lineY + config.font_size
         end
+    end
+
+    lineY = lineY + config.padding
+
+    ass:new_event()
+    ass:an(7)
+    ass:pos(config.padding, lineY)
+    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
+    ass:append("Navigation")
+
+    lineY = lineY + config.hint_font_size * 1.5
+
+    ass:new_event()
+    ass:an(7)
+    ass:pos(config.padding, lineY)
+    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
+    ass:append(string.format("%s"..data.tab.."%s", "<LEFT-RIGHT> Back / Edit", "<UP-DOWN> Prev / Next Item"))
+
+    lineY = lineY + config.hint_font_size * 1.5
+
+    ass:new_event()
+    ass:an(7)
+    ass:pos(config.padding, lineY)
+    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
+    ass:append("Actions")
+
+    lineY = lineY + config.hint_font_size * 1.5
+
+    ass:new_event()
+    ass:an(7)
+    ass:pos(config.padding, lineY)
+    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
+    ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s", "<ENTER> Confirm", "<DEL> Reset value", "<SHIFT+DEL> Reset all", "<O> Load your style", "<ESC> Exit"))
+
+    if page == "styles" then
+
+        lineY = lineY + config.hint_font_size + config.padding
+
+        ass:new_event()
+        ass:an(7)
+        ass:pos(config.padding, lineY)
+        ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.hint_font_size))
+        ass:append("Styles of the lines currently visible on screen will be highlighted in yellow.")
     end
 
     --update
@@ -762,24 +805,38 @@ local function saveConfig()
     if next(styles.overrides) == nil then return end
 
     local file
+    local formattedOverrides = getStyleOverrides()
 
-    file = io.open(getPath("overridefile"), "w")
+    if formattedOverrides == "" then
 
-    if not file then mp.osd_message("Config file not created!") return end
+        for _, k in pairs({"overridefile", "overridefile/converted"}) do
 
-    file:write(utils.format_json(styles.overrides))
-    file:close()
+            file = io.open(getPath(k), "r")
 
-    local overrides = getStyleOverrides()
+            if file then
 
-    if overrides == "" then return end
+                file:close()
 
-    file = io.open(getPath("overridefile/converted"), "w")
+                os.remove(getPath(k))
+            end
+        end
 
-    if not file then mp.osd_message("Config file not created!") return end
+        return
+    end
 
-    file:write(overrides)
-    file:close()
+    for _, k in pairs({"overridefile", "overridefile/converted"}) do
+
+        file = io.open(getPath(k), "w")
+
+        if not file then
+
+            mp.osd_message("Config file not created!")
+        else
+
+            file:write(k == "overridefile" and utils.format_json(styles.overrides) or formattedOverrides)
+            file:close()
+        end
+    end
 end
 
 local function readConfig(fileType)
@@ -941,6 +998,48 @@ local function bindingList(section)
         }
     elseif section == "editstyle" then
 
+        local loadDefaultStyle = function()
+
+            if config.my_style == "" then return end
+
+            local changed = false
+
+            for p, v in config.my_style:gmatch("([^:,]+):([^:,]+)") do
+
+                input.init()
+
+                input.font_size = config.font_size
+
+                if map[p] then
+
+                    map[p].setRange()
+
+                    v = map[p].getValue and map[p].getValue(v) or v
+
+                    if input.default(v) then
+
+                        changed = true
+
+                        if not styles.overrides[tostring(index.styles)] then styles.overrides[tostring(index.styles)] = {} end
+
+                        styles.overrides[tostring(index.styles)][p] = (map[p] and map[p].setValue) and map[p].setValue(input.get_text()) or input.get_text()
+                    else
+
+                        mp.msg["warn"](string.format("Value is out of allowed range: %s (%s)", v, p))
+                    end
+                else
+
+                    mp.msg["warn"](string.format("This property has no defined handler: %s", p))
+                end
+            end
+
+            if changed then
+
+                setStyleOverrides()
+                render()
+            end
+        end
+
         defaultBindings = {
 
             close = {
@@ -990,7 +1089,7 @@ local function bindingList(section)
                 opts = {repeatable = true}
             },
 
-            revertdefault = {
+            resetvalue = {
 
                 key  = "del",
                 func = function ()
@@ -1001,9 +1100,44 @@ local function bindingList(section)
 
                         styles.overrides[tostring(index.styles)][property] = nil
 
+                        if next(styles.overrides[tostring(index.styles)]) == nil then styles.overrides[tostring(index.styles)] = nil end
+
                         setStyleOverrides()
                         render()
                     end
+                end,
+                opts = {repeatable = true}
+            },
+
+            resetall = {
+
+                key  = "shift+del",
+                func = function ()
+
+                    styles.overrides[tostring(index.styles)] = nil
+
+                    setStyleOverrides()
+                    render()
+                end,
+                opts = {repeatable = true}
+            },
+
+            loadefaultstyle = {
+
+                key  = "o",
+                func = function ()
+
+                    loadDefaultStyle()
+                end,
+                opts = {repeatable = true}
+            },
+
+            loadefaultstylealt = {
+
+                key  = "O",
+                func = function ()
+
+                    loadDefaultStyle()
                 end,
                 opts = {repeatable = true}
             },
@@ -1040,6 +1174,18 @@ local function bindingList(section)
 
                 render()
             end,
+
+            edit_clipboard = function(text)
+
+                local property = styles.editable[index.editstyle]
+
+                if property and string.find(property, "Colour") and #text == 6 then
+
+                    text = text..",00"
+                end
+
+                return text
+            end
         })
 
         defaultBindings = {

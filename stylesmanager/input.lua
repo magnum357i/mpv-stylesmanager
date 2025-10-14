@@ -1,4 +1,4 @@
---v1.5
+--v1.6
 local utf8  = require "fastutf8"
 local input = {}
 local cursor, text, s_width, s_height, b_width, cached
@@ -114,6 +114,37 @@ end
 --after_changes, edit_clipboard(text)
 function input.bindings(hooks)
 
+    local paste = function()
+
+        local clipboard_text = get_clipboard()
+
+        if input.format ~= "" or input.accept_only ~= "" then
+
+            if hooks and hooks.edit_clipboard then clipboard_text = hooks.edit_clipboard(clipboard_text) end
+
+            if not validate(clipboard_text) then return end
+
+            text   = clipboard_text
+            cursor = utf8.len(text)
+
+            if hooks and hooks.after_changes then hooks.after_changes() end
+
+            return
+        end
+
+        local count = utf8.len(text)
+
+        if count >= input.max then return end
+
+        local pre_cursor  = cursor == 0 and "" or utf8.sub(text, 1, cursor)
+        local post_cursor = utf8.sub(text, cursor + 1, 0)
+        clipboard_text    = utf8.sub(clipboard_text, 1, input.max - count)
+        text              = pre_cursor..clipboard_text..post_cursor
+        cursor            = cursor + utf8.len(clipboard_text)
+
+        if hooks and hooks.after_changes then hooks.after_changes() end
+    end
+
     local list = {
 
         cursorhome = {
@@ -182,33 +213,17 @@ function input.bindings(hooks)
             key  = "ctrl+v",
             func = function ()
 
-                local clipboard_text = get_clipboard()
+                paste()
+            end,
+            opts = {repeatable = true}
+        },
 
-                if input.format ~= "" or input.accept_only ~= "" then
+        pastealt = {
 
-                    if hooks and hooks.edit_clipboard then clipboard_text = hooks.edit_clipboard(clipboard_text) end
+            key  = "ctrl+V",
+            func = function ()
 
-                    if not validate(clipboard_text) then return end
-
-                    text   = clipboard_text
-                    cursor = utf8.len(text)
-
-                    if hooks and hooks.after_changes then hooks.after_changes() end
-
-                    return
-                end
-
-                local count = utf8.len(text)
-
-                if count >= input.max then return end
-
-                local pre_cursor  = cursor == 0 and "" or utf8.sub(text, 1, cursor)
-                local post_cursor = utf8.sub(text, cursor + 1, 0)
-                clipboard_text    = utf8.sub(clipboard_text, 1, input.max - count)
-                text              = pre_cursor..clipboard_text..post_cursor
-                cursor            = cursor + utf8.len(clipboard_text)
-
-                if hooks and hooks.after_changes then hooks.after_changes() end
+                paste()
             end,
             opts = {repeatable = true}
         },
@@ -295,10 +310,12 @@ end
 
 function input.default(str)
 
-    if not validate(str) then print("Default value does not match the required format.") return end
+    if not validate(str) then return false end
 
     text   = str
     cursor = utf8.len(text)
+
+    return true
 end
 
 function input.reset()
