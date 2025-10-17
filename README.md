@@ -27,6 +27,9 @@ padding=20
 # You can convert any RGB value to BGR by swapping the first and last two characters. Just remember that the first two characters in an ASS color code represent the alpha channel.
 # Available Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
 my_style=Fontname:Cambria,Fontsize:50,PrimaryColour:&H00E20D37
+
+# Don't show these items
+properties_to_hide=SecondaryColour,MarginL,MarginR
 ```
 
 # Key Bindings

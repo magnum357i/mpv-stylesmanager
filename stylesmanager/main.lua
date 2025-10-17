@@ -2,8 +2,10 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.2             ║
+║             v1.0.3             ║
 ╚════════════════════════════════╝
+
+Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
 
 ]]
 
@@ -14,10 +16,11 @@ local assline = require "assline"
 local input   = require "input"
 local config  = {
 
-    font_size      = 18,
-    hint_font_size = 11,
-    padding        = 20,
-    my_style       = ""
+    font_size          = 18,
+    hint_font_size     = 11,
+    padding            = 20,
+    my_style           = "",
+    properties_to_hide = "SecondaryColour,MarginL,MarginR"
 }
 
 options.read_options(config, "stylesmanager")
@@ -139,18 +142,19 @@ local function fillData()
     data.tab                            = string.rep("\\h", 4)
     data.propertyNames                  = {
 
-        Fontname      = "Font",
-        Fontsize      = "Size",
-        PrimaryColour = "Color",
-        OutlineColour = "Border Color",
-        BackColour    = "Shadow Color",
-        ScaleX        = "Scale X",
-        ScaleY        = "Scale Y",
-        Outline       = "Border",
-        Alignment     = "Position",
-        MarginV       = "Vertical Align",
-        MarginL       = "Left Align",
-        MarginR       = "Right Align"
+        Fontname        = "Font",
+        Fontsize        = "Size",
+        PrimaryColour   = "Color",
+        SecondaryColour = "Transition Color",
+        OutlineColour   = "Border Color",
+        BackColour      = "Shadow Color",
+        ScaleX          = "Scale X",
+        ScaleY          = "Scale Y",
+        Outline         = "Border",
+        Alignment       = "Position",
+        MarginV         = "Vertical Align",
+        MarginL         = "Left Align",
+        MarginR         = "Right Align"
     }
 end
 
@@ -179,15 +183,31 @@ end
 
 local function getEditableValues()
 
-    return {
+    local all = {
 
         "Fontname", "Fontsize",
-        "PrimaryColour", "OutlineColour", "BackColour",
+        "PrimaryColour", "SecondaryColour", "OutlineColour", "BackColour",
         "Bold", "Italic",
         "ScaleX", "ScaleY", "Spacing",
         "Outline", "Shadow",
         "Alignment", "MarginV", "MarginR", "MarginL"
     }
+
+    local excluded = {}
+
+    for v in string.gmatch(config.properties_to_hide, "([^,]+)") do
+
+        excluded[v] = true
+    end
+
+    local values = {}
+
+    for _, v in ipairs(all) do
+
+        if not excluded[v] then table.insert(values, v) end
+    end
+
+    return values
 end
 
 local function serializeStyle(styleName, style)
@@ -342,6 +362,23 @@ local function generateMap()
         },
 
         PrimaryColour = {
+
+            setRange = function()
+
+                input.format = "[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f],[0-9A-Fa-f][0-9A-Fa-f]"
+            end,
+
+            getValue = function (v)
+
+                local alpha, color = v:match("([0-9A-Fa-f][0-9A-Fa-f])([0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f])")
+
+                if not alpha then return string.format("%s,%s", "000000", "00") end
+
+                return string.format("%s,%s", convertColor(color, "BGR"), alpha)
+            end
+        },
+
+        SecondaryColour = {
 
             setRange = function()
 
@@ -604,12 +641,16 @@ local function render()
                 ass:append(string.format("{\\c%s}", colors.selected))
             end
 
+            local editedSymbol = ""
+
+            if styles.overrides[tostring(i)] then editedSymbol = "*" end
+
             if i == index.styles then
 
-                ass:append(string.format("{\\b1}● %s{\\b0}", styles.original[i].Name))
+                ass:append(string.format("{\\b1}● %s%s{\\b0}", editedSymbol, styles.original[i].Name))
             else
 
-                ass:append(string.format("○ %s", styles.original[i].Name))
+                ass:append(string.format("○ %s%s", editedSymbol, styles.original[i].Name))
             end
 
             lineY = lineY + config.font_size
@@ -716,15 +757,15 @@ local function render()
     ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
     ass:append("Actions")
 
-    lineY = lineY + config.hint_font_size * 1.5
-
-    ass:new_event()
-    ass:an(7)
-    ass:pos(config.padding, lineY)
-    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-    ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s", "<ENTER> Confirm", "<DEL> Reset value", "<SHIFT+DEL> Reset all", "<O> Load your style", "<ESC> Exit"))
-
     if page == "styles" then
+
+        lineY = lineY + config.hint_font_size * 1.5
+
+        ass:new_event()
+        ass:an(7)
+        ass:pos(config.padding, lineY)
+        ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
+        ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s", "<DEL> Reset", "<SHIFT+DEL> Reset all", "<ESC> Exit"))
 
         lineY = lineY + config.hint_font_size + config.padding
 
@@ -733,6 +774,15 @@ local function render()
         ass:pos(config.padding, lineY)
         ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.hint_font_size))
         ass:append("Styles of the lines currently visible on screen will be highlighted in yellow.")
+    else
+
+    lineY = lineY + config.hint_font_size * 1.5
+
+        ass:new_event()
+        ass:an(7)
+        ass:pos(config.padding, lineY)
+        ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
+        ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s", "<ENTER> Confirm", "<DEL> Reset value", "<SHIFT+DEL> Reset style", "<O> Load your style", "<ESC> Exit"))
     end
 
     --update
@@ -1007,11 +1057,28 @@ local function bindingList(section)
                 opts = nil
             },
 
-            disabledel = {
+            resetstyle = {
 
                 key  = "del",
                 func = function ()
 
+                    styles.overrides[tostring(index.styles)] = nil
+
+                    applyStyleOverrides()
+                    render()
+                end,
+                opts = nil
+            },
+
+            resetallstyles = {
+
+                key  = "shift+del",
+                func = function ()
+
+                    styles.overrides = {}
+
+                    applyStyleOverrides()
+                    render()
                 end,
                 opts = nil
             },
@@ -1087,7 +1154,7 @@ local function bindingList(section)
                 opts = nil
             },
 
-            resetall = {
+            resetstyle = {
 
                 key  = "shift+del",
                 func = function ()
