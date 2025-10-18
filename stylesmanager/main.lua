@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.3             ║
+║             v1.0.4             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -156,9 +156,10 @@ local function fillData()
         MarginL         = "Left Align",
         MarginR         = "Right Align"
     }
+    data.editedSymbol                   = "*"
 end
 
-local function setStyles(metadata)
+local function loadStyles(metadata)
 
     if #styles.original > 0 then return end
 
@@ -261,11 +262,12 @@ local function getStyleOverrides()
 
     local overrides = {}
 
-    for i, v in pairs(styles.overrides) do
+    for s, v in pairs(styles.overrides) do
 
-        v = serializeStyle(styles.original[tonumber(i)].Name, v)
+        v = serializeStyle(s, v)
+        v = lastChanges(v)
 
-        if v ~= "" then table.insert(overrides, lastChanges(v)) end
+        table.insert(overrides, v)
     end
 
     if #overrides == 0 then return "" end
@@ -324,7 +326,7 @@ local function generateMap()
 
             getValue = function (v)
 
-                return v and "1" or "0"
+                return v and 1 or 0
             end,
 
             setValue = function (v)
@@ -348,7 +350,7 @@ local function generateMap()
 
             getValue = function (v)
 
-                return v and "1" or "0"
+                return v and 1 or 0
             end,
 
             setValue = function (v)
@@ -495,6 +497,15 @@ local function generateMap()
                 input.max         = 50
             end,
 
+            getValue = function (v)
+
+                if not tonumber(v) then return 0 end
+
+                v = string.gsub(tostring(v), "(%.%d)%d+", "%1")
+
+                return v
+            end,
+
             setValue = function (v)
 
                 v = tonumber(v)
@@ -512,6 +523,15 @@ local function generateMap()
                 input.accept_only = "float"
                 input.min         = 0
                 input.max         = 50
+            end,
+
+            getValue = function (v)
+
+                if not tonumber(v) then return 0 end
+
+                v = string.gsub(tostring(v), "(%.%d)%d+", "%1")
+
+                return v
             end,
 
             setValue = function (v)
@@ -631,6 +651,8 @@ local function render()
 
         for i = 1, #styles.original do
 
+            local edited = styles.overrides[styles.original[i].Name]
+
             ass:new_event()
             ass:an(7)
             ass:pos(config.padding + data.columns[1], lineY)
@@ -641,16 +663,12 @@ local function render()
                 ass:append(string.format("{\\c%s}", colors.selected))
             end
 
-            local editedSymbol = ""
-
-            if styles.overrides[tostring(i)] then editedSymbol = "*" end
-
             if i == index.styles then
 
-                ass:append(string.format("{\\b1}● %s%s{\\b0}", editedSymbol, styles.original[i].Name))
+                ass:append(string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", styles.original[i].Name))
             else
 
-                ass:append(string.format("○ %s%s", editedSymbol, styles.original[i].Name))
+                ass:append(string.format("○ %s%s", edited and data.editedSymbol or "", styles.original[i].Name))
             end
 
             lineY = lineY + config.font_size
@@ -663,26 +681,24 @@ local function render()
         ass:append(string.format("{\\bord%s\\b1\\fs%s}", data.borderSize, config.font_size))
         ass:append(string.format("← Edit style: \"%s\"", styles.original[index.styles].Name))
 
-        lineY = lineY + config.font_size
+        lineY           = lineY + config.font_size
+        local styleName = styles.original[index.styles].Name
 
-        for i, name in pairs(styles.editable) do
+        for i, property in pairs(styles.editable) do
 
-            local override = styles.overrides[tostring(index.styles)] and styles.overrides[tostring(index.styles)][name]
-            local editedSymbol   = ""
+            local edited = styles.overrides[styleName] and styles.overrides[styleName][property]
 
             ass:new_event()
             ass:an(7)
             ass:pos(config.padding + data.columns[1], lineY)
             ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size))
 
-            if override and styles.overrides[tostring(index.styles)][name] ~= styles.original[index.styles][name] then editedSymbol = "*" end
-
             if i == index.editstyle then
 
-                ass:append(string.format("{\\b1}● %s%s{\\b0}", editedSymbol, data.propertyNames[name] or name))
+                ass:append(string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", data.propertyNames[property] or property))
             else
 
-                ass:append(string.format("○ %s%s", editedSymbol, data.propertyNames[name] or name))
+                ass:append(string.format("○ %s%s", edited and data.editedSymbol or "", data.propertyNames[property] or property))
             end
 
             if page == "editstyle" or (page == "editvalue" and i ~= index.editstyle) then
@@ -692,12 +708,12 @@ local function render()
                 ass:pos(config.padding + data.columns[2], lineY)
                 ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size))
 
-                if override then
+                if edited then
 
-                    ass:append(styles.overrides[tostring(index.styles)][name])
+                    ass:append(styles.overrides[styleName][property])
                 else
 
-                    ass:append(styles.original[index.styles][name])
+                    ass:append(styles.original[index.styles][property])
                 end
             else
 
@@ -776,7 +792,7 @@ local function render()
         ass:append("Styles of the lines currently visible on screen will be highlighted in yellow.")
     else
 
-    lineY = lineY + config.hint_font_size * 1.5
+        lineY = lineY + config.hint_font_size * 1.5
 
         ass:new_event()
         ass:an(7)
@@ -793,7 +809,7 @@ end
 local function handleEdit()
 
     local p = styles.editable[index.editstyle]
-    local i = tostring(index.styles)
+    local s = styles.original[index.styles].Name
 
     input.init()
 
@@ -802,12 +818,12 @@ local function handleEdit()
 
     if map[p] then map[p].setRange() end
 
-    if styles.overrides[i] and styles.overrides[i][p] then
+    if styles.overrides[s] and styles.overrides[s][p] then
 
-        input.default(tostring(styles.overrides[i][p]))
+        input.default(tostring(styles.overrides[s][p]))
     else
 
-        input.default(tostring(styles.original[tonumber(i)][p]))
+        input.default(tostring(styles.original[index.styles][p]))
     end
 
     unsetBindings("editstyle")
@@ -816,7 +832,7 @@ local function handleEdit()
     render()
 end
 
-local function setScreenStyles()
+local function loadScreenStyles()
 
     if next(styles.onscreen) ~= nil then return end
 
@@ -838,26 +854,26 @@ end
 local function changeValue(newValue, property)
 
     local p = property or styles.editable[index.editstyle]
-    local i = tostring(index.styles)
+    local s = styles.original[index.styles].Name
 
     if newValue ~= nil then
 
-        if not styles.overrides[i] then styles.overrides[i] = {} end
+        if not styles.overrides[s] then styles.overrides[s] = {} end
 
         if tostring(styles.original[index.styles][p]) == newValue then
 
-            styles.overrides[i][p] = nil
+            styles.overrides[s][p] = nil
         else
 
-            styles.overrides[i][p] = (map[p] and map[p].setValue) and map[p].setValue(newValue) or newValue
+            styles.overrides[s][p] = (map[p] and map[p].setValue) and map[p].setValue(newValue) or newValue
         end
     else
 
-        if styles.overrides[i] and styles.overrides[i][p] then
+        if styles.overrides[s] and styles.overrides[s][p] then
 
-            styles.overrides[i][p] = nil
+            styles.overrides[s][p] = nil
 
-            if next(styles.overrides[i]) == nil then styles.overrides[i] = nil end
+            if next(styles.overrides[s]) == nil then styles.overrides[s] = nil end
         end
     end
 end
@@ -885,9 +901,9 @@ local function saveConfig()
     end
 
     local file
-    local formattedOverrides = getStyleOverrides()
+    local newOverrides = getStyleOverrides()
 
-    if formattedOverrides == "" then
+    if newOverrides == "" then
 
         for _, k in pairs({"overridefile", "overridefile/converted"}) do
 
@@ -913,10 +929,12 @@ local function saveConfig()
             mp.osd_message("Config file not created!")
         else
 
-            file:write(k == "overridefile" and utils.format_json(styles.overrides) or formattedOverrides)
+            file:write(k == "overridefile" and utils.format_json(styles.overrides) or newOverrides)
             file:close()
         end
     end
+
+    print(string.format("Saved style overrides: \"%s\"", newOverrides))
 end
 
 local function readConfig(fileType)
@@ -944,6 +962,8 @@ local function readConfig(fileType)
 
         file:close()
 
+        print(string.format("Loaded style overrides: \"%s\"", content))
+
         mp.set_property("sub-ass-style-overrides", content)
     end
 end
@@ -957,12 +977,12 @@ local function toggle(section)
         if metadata == "" then mp.osd_message("No style data found.", 3) return end
 
         fillData()
-        setScreenStyles()
+        loadScreenStyles()
 
         map             = generateMap()
         styles.editable = getEditableValues()
 
-        setStyles(metadata)
+        loadStyles(metadata)
 
         if #styles.original == 0 then
 
@@ -1062,7 +1082,7 @@ local function bindingList(section)
                 key  = "del",
                 func = function ()
 
-                    styles.overrides[tostring(index.styles)] = nil
+                    styles.overrides[styles.original[index.styles].Name] = nil
 
                     applyStyleOverrides()
                     render()
@@ -1159,7 +1179,7 @@ local function bindingList(section)
                 key  = "shift+del",
                 func = function ()
 
-                    styles.overrides[tostring(index.styles)] = nil
+                    styles.overrides[styles.original[index.styles].Name] = nil
 
                     applyStyleOverrides()
                     render()

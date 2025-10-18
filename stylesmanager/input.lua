@@ -301,6 +301,8 @@ end
 
 function input.default(str)
 
+    str = tostring(str)
+
     if not validate(str) then return false end
 
     text   = str
