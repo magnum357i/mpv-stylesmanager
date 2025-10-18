@@ -301,6 +301,8 @@ end
 
 function input.default(str)
 
+    if str == nil then return false end
+
     str = tostring(str)
 
     if not validate(str) then return false end

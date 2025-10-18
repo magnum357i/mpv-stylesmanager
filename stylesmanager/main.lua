@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.4             ║
+║             v1.0.5             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -36,6 +36,8 @@ local map                  = {}
 local colors               = {selected = "FFFF00"}
 local data                 = {}
 local opened               = false
+local changed              = false
+local resample             = {sx = 0, sy = 0, tx = 1920, ty = 1080}
 
 local function hash(str)
 
@@ -138,7 +140,7 @@ local function fillData()
 
     data.screenWidth, data.screenHeight = mp.get_osd_size()
     data.borderSize                     = mp.get_property_number('osd-border-size')
-    data.columns                        = {10, calculateTextWidth(string.rep("A", 13), config.font_size)}
+    data.columns                        = {0, calculateTextWidth(string.rep("A", 15), config.font_size)}
     data.tab                            = string.rep("\\h", 4)
     data.propertyNames                  = {
 
@@ -157,6 +159,7 @@ local function fillData()
         MarginR         = "Right Align"
     }
     data.editedSymbol                   = "*"
+    data.rx, data.ry                    = resample.sx / resample.tx, resample.sy / resample.ty
 end
 
 local function loadStyles(metadata)
@@ -309,9 +312,16 @@ local function generateMap()
 
                 v = tonumber(v)
 
-                if not v then return 1 end
+                if not v then return 25 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return tostring(math.floor(v * data.ry + 0.5))
             end
         },
 
@@ -444,7 +454,7 @@ local function generateMap()
 
                 v = tonumber(v)
 
-                if not v then return 0 end
+                if not v then return 100 end
 
                 return v
             end
@@ -463,7 +473,7 @@ local function generateMap()
 
                 v = tonumber(v)
 
-                if not v then return 0 end
+                if not v then return 100 end
 
                 return v
             end
@@ -485,6 +495,13 @@ local function generateMap()
                 if not v then return 0 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return tostring(math.floor(v * data.ry + 0.5))
             end
         },
 
@@ -513,6 +530,13 @@ local function generateMap()
                 if not v then return 0 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return string.format("%.1f", v * data.ry + 0.5)
             end
         },
 
@@ -541,6 +565,13 @@ local function generateMap()
                 if not v then return 0 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return string.format("%.1f", v * data.ry + 0.5)
             end
         },
 
@@ -579,6 +610,13 @@ local function generateMap()
                 if not v then return 0 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return tostring(math.floor(v * data.ry + 0.5))
             end
         },
 
@@ -598,6 +636,13 @@ local function generateMap()
                 if not v then return 0 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return tostring(math.floor(v * data.rx + 0.5))
             end
         },
 
@@ -617,6 +662,13 @@ local function generateMap()
                 if not v then return 0 end
 
                 return v
+            end,
+
+            resample = function(v)
+
+                v = tonumber(v)
+
+                return tostring(math.floor(v * data.rx + 0.5))
             end
         }
     }
@@ -651,38 +703,40 @@ local function render()
 
         for i = 1, #styles.original do
 
-            local edited = styles.overrides[styles.original[i].Name]
+            local styleName = styles.original[i].Name
+            local edited    = styles.overrides[styleName]
 
             ass:new_event()
             ass:an(7)
             ass:pos(config.padding + data.columns[1], lineY)
             ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size))
 
-            if styles.onscreen[styles.original[i].Name] then
+            if styles.onscreen[styleName] then
 
                 ass:append(string.format("{\\c%s}", colors.selected))
             end
 
             if i == index.styles then
 
-                ass:append(string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", styles.original[i].Name))
+                ass:append(string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", styleName))
             else
 
-                ass:append(string.format("○ %s%s", edited and data.editedSymbol or "", styles.original[i].Name))
+                ass:append(string.format("○ %s%s", edited and data.editedSymbol or "", styleName))
             end
 
             lineY = lineY + config.font_size
         end
     elseif page == "editstyle" or page == "editvalue" then
 
+        local styleName = styles.original[index.styles].Name
+
         ass:new_event()
         ass:an(7)
         ass:pos(config.padding, lineY)
         ass:append(string.format("{\\bord%s\\b1\\fs%s}", data.borderSize, config.font_size))
-        ass:append(string.format("← Edit style: \"%s\"", styles.original[index.styles].Name))
+        ass:append(string.format("← Edit style: \"%s\"", styleName))
 
-        lineY           = lineY + config.font_size
-        local styleName = styles.original[index.styles].Name
+        lineY = lineY + config.font_size
 
         for i, property in pairs(styles.editable) do
 
@@ -820,10 +874,10 @@ local function handleEdit()
 
     if styles.overrides[s] and styles.overrides[s][p] then
 
-        input.default(tostring(styles.overrides[s][p]))
+        input.default(styles.overrides[s][p])
     else
 
-        input.default(tostring(styles.original[index.styles][p]))
+        input.default(styles.original[index.styles][p])
     end
 
     unsetBindings("editstyle")
@@ -844,37 +898,56 @@ local function loadScreenStyles()
 
         line = assline:new(line)
 
-        if line then
+        if line then styles.onscreen[line.Style] = true end
+    end
+end
 
-            styles.onscreen[line.Style] = true
+local function resetValue(all)
+
+    local p = styles.editable[index.editstyle]
+    local s = styles.original[index.styles].Name
+
+    if all then
+
+        if page == "styles" and next(styles.overrides) ~= nil then
+
+            changed          = true
+            styles.overrides = {}
+        elseif page == "editstyle" and styles.overrides[s] then
+
+            changed             = true
+            styles.overrides[s] = nil
+        end
+    else
+
+        if page == "styles" and styles.overrides[s] then
+
+            changed             = true
+            styles.overrides[s] = nil
+        elseif page == "editstyle" and styles.overrides[s] and styles.overrides[s][p] then
+
+            changed                = true
+            styles.overrides[s][p] = nil
+
+            if next(styles.overrides[s]) == nil then styles.overrides[s] = nil end
         end
     end
 end
 
 local function changeValue(newValue, property)
 
+    changed = true
     local p = property or styles.editable[index.editstyle]
     local s = styles.original[index.styles].Name
 
-    if newValue ~= nil then
+    if not styles.overrides[s] then styles.overrides[s] = {} end
 
-        if not styles.overrides[s] then styles.overrides[s] = {} end
+    if tostring(styles.original[index.styles][p]) == newValue then
 
-        if tostring(styles.original[index.styles][p]) == newValue then
-
-            styles.overrides[s][p] = nil
-        else
-
-            styles.overrides[s][p] = (map[p] and map[p].setValue) and map[p].setValue(newValue) or newValue
-        end
+        styles.overrides[s][p] = nil
     else
 
-        if styles.overrides[s] and styles.overrides[s][p] then
-
-            styles.overrides[s][p] = nil
-
-            if next(styles.overrides[s]) == nil then styles.overrides[s] = nil end
-        end
+        styles.overrides[s][p] = (map[p] and map[p].setValue) and map[p].setValue(newValue) or newValue
     end
 end
 
@@ -889,9 +962,14 @@ local function reset()
     data             = {}
     map              = {}
     page             = "styles"
+    changed          = false
+    resample.sx      = 0
+    resample.sy      = 0
 end
 
 local function saveConfig()
+
+    if not changed then return end
 
     local configPath = getPath("config")
 
@@ -976,6 +1054,9 @@ local function toggle(section)
 
         if metadata == "" then mp.osd_message("No style data found.", 3) return end
 
+        resample.sx = tonumber(metadata:match("PlayResX: (%d+)")) or 0
+        resample.sy = tonumber(metadata:match("PlayResY: (%d+)")) or 0
+
         fillData()
         loadScreenStyles()
 
@@ -993,6 +1074,10 @@ local function toggle(section)
 
             return
         end
+
+        local shouldResample = resample.sx > 0 and resample.sx ~= resample.tx and resample.sy > 0 and resample.sy ~= resample.ty
+
+        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resample.sx, resample.sy, resample.tx, resample.ty)) end
 
         readConfig("overridefile")
         render()
@@ -1082,8 +1167,7 @@ local function bindingList(section)
                 key  = "del",
                 func = function ()
 
-                    styles.overrides[styles.original[index.styles].Name] = nil
-
+                    resetValue()
                     applyStyleOverrides()
                     render()
                 end,
@@ -1095,8 +1179,7 @@ local function bindingList(section)
                 key  = "shift+del",
                 func = function ()
 
-                    styles.overrides = {}
-
+                    resetValue(true)
                     applyStyleOverrides()
                     render()
                 end,
@@ -1167,7 +1250,7 @@ local function bindingList(section)
                 key  = "del",
                 func = function ()
 
-                    changeValue(nil)
+                    resetValue()
                     applyStyleOverrides()
                     render()
                 end,
@@ -1179,8 +1262,7 @@ local function bindingList(section)
                 key  = "shift+del",
                 func = function ()
 
-                    styles.overrides[styles.original[index.styles].Name] = nil
-
+                    resetValue(true)
                     applyStyleOverrides()
                     render()
                 end,
@@ -1194,7 +1276,8 @@ local function bindingList(section)
 
                     if config.my_style == "" then return end
 
-                    local changed = false
+                    local changed        = false
+                    local shouldResample = resample.sx > 0 and resample.sx ~= resample.tx and resample.sy > 0 and resample.sy ~= resample.ty
 
                     for p, v in config.my_style:gmatch("([^:,]+):([^:,]+)") do
 
@@ -1212,7 +1295,7 @@ local function bindingList(section)
 
                                 changed = true
 
-                                changeValue(input.get_text(), p)
+                                changeValue(shouldResample and map[p].resample and map[p].resample(input.get_text()) or input.get_text(), p)
                             else
 
                                 mp.msg.warn(string.format("Value is out of allowed range: %s (%s)", v, p))
