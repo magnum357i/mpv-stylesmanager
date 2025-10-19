@@ -13,8 +13,8 @@ Place `scripts` and `script-opts` folders into your config directory.
 
 | OS                 | Location         |
 | ------------------ | ---------------- |
-| GNU/Linux or macOS | `~/.config/mpv/` |
 | Windows            | `%appdata%/mpv/` |
+| GNU/Linux or macOS | `~/.config/mpv/` |
 
 # Configuration
 ```ini

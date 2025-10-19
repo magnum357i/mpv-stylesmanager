@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.6             ║
+║             v1.0.7             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -39,6 +39,7 @@ local data                 = {}
 local opened               = false
 local changed              = false
 local resampleRes          = {sWidth = 0, sHeight = 0, dWidth = 1920, dHeight = 1080}
+local isWindows            = package.config:sub(1, 1) ~= '/'
 
 local function hash(str)
 
@@ -72,9 +73,9 @@ local function getPath(key)
 
     local fullPath
     local hash       = hash(utils.split_path(mp.get_property("path")))
-    local configPath = os.getenv("temp")
+    local configPath = os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
     local configDir  = "mpvstylesmanager"
-    local seperator  = "\\"
+    local seperator  = package.config:sub(1,1)
 
     if key == "config" then
 
@@ -982,7 +983,13 @@ local function saveConfig()
 
     if not os.rename(configPath, configPath) then
 
-        runCommand({"powershell", "-NoProfile", "-Command", "mkdir", configPath})
+        if isWindows then
+
+            runCommand({"powershell", "-NoProfile", "-Command", "mkdir", configPath})
+        else
+
+            runCommand({"mkdir", "-p", configPath})
+        end
     end
 
     local file
@@ -1011,7 +1018,7 @@ local function saveConfig()
 
         if not file then
 
-            mp.osd_message("Config file not created!")
+            mp.osd_message("Config file not created!", 3)
         else
 
             file:write(k == "overridefile" and utils.format_json(styles.overrides) or newOverrides)
@@ -1059,7 +1066,7 @@ local function toggle(section)
 
         local metadata = mp.get_property("sub-ass-extradata", "")
 
-        if metadata == "" then mp.osd_message("No style data found.", 3) return end
+        if metadata == "" then mp.osd_message("Missing metadata.", 3) return end
 
         resampleRes.sWidth  = tonumber(metadata:match("PlayResX: (%d+)")) or 0
         resampleRes.sHeight = tonumber(metadata:match("PlayResY: (%d+)")) or 0
@@ -1077,7 +1084,7 @@ local function toggle(section)
             reset()
             collectgarbage()
 
-            mp.osd_message("No styles found.", 3)
+            mp.osd_message("Failed to parse styles.", 3)
 
             return
         end
