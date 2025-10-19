@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.7             ║
+║             v1.0.8             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -14,6 +14,7 @@ local utils   = require "mp.utils"
 local assdraw = require "mp.assdraw"
 local assline = require "assline"
 local input   = require "input"
+local path    = require "path"
 local config  = {
 
     font_size          = 30,
@@ -39,7 +40,6 @@ local data                 = {}
 local opened               = false
 local changed              = false
 local resampleRes          = {sWidth = 0, sHeight = 0, dWidth = 1920, dHeight = 1080}
-local isWindows            = package.config:sub(1, 1) ~= '/'
 
 local function hash(str)
 
@@ -71,24 +71,21 @@ end
 
 local function getPath(key)
 
-    local fullPath
     local hash       = hash(utils.split_path(mp.get_property("path")))
-    local configPath = os.getenv("TEMP") or os.getenv("TMPDIR") or "/tmp"
-    local configDir  = "mpvstylesmanager"
-    local seperator  = package.config:sub(1,1)
+    local tempFolder = "mpvstylesmanager"
 
-    if key == "config" then
+    if key == "cache" then
 
-        fullPath = utils.join_path(configPath, configDir)
+        return path.join({"%temp", tempFolder})
     elseif key == "overridefile" then
 
-        fullPath = utils.join_path(configPath, configDir..seperator..hash..".json")
+        return path.join({"%temp", tempFolder, hash..".json"})
     elseif key == "overridefile/converted" then
 
-        fullPath = utils.join_path(configPath, configDir..seperator..hash..".converted.json")
+        return path.join({"%temp", tempFolder, hash..".converted.json"})
     end
 
-    return fullPath
+    return nil
 end
 
 local function convertColor(colorCode, colorType)
@@ -108,10 +105,10 @@ end
 
 for key in pairs(colors) do colors[key] = convertColor(colors[key], "RGB") end
 
-local function calculateTextWidth(text, fontSize)
+local function calculateTextWidth(line)
 
     textOverlay.res_x, textOverlay.res_y = mp.get_osd_size()
-    textOverlay.data                     = "{\\bord0\\b0\\fs"..fontSize.."}"..text
+    textOverlay.data                     = line
     local res                            = textOverlay:update()
 
     return (res and res.x1) and (res.x1 - res.x0) or 0
@@ -150,7 +147,6 @@ local function fillData()
 
     data.screenWidth, data.screenHeight = getScaledResolution()
     data.borderSize                     = mp.get_property_number('osd-border-size')
-    data.columns                        = {0, calculateTextWidth("Transition Color", config.font_size) * 2 + config.padding}
     data.tab                            = string.rep("\\h", 4)
     data.propertyNames                  = {
 
@@ -170,11 +166,10 @@ local function fillData()
     }
     data.editedSymbol                   = "*"
     data.rx, data.ry                    = resampleRes.sWidth / resampleRes.dWidth, resampleRes.sHeight / resampleRes.dHeight
+    data.columns                        = {0, calculateTextWidth(string.format("{\\bord%s\\b1\\fs%s}● %s%s", data.borderSize, config.font_size, data.editedSymbol, string.rep("A", 14)))}
 end
 
 local function loadStyles(metadata)
-
-    if #styles.original > 0 then return end
 
     for style in metadata:gmatch("Style:[^\n]+") do
 
@@ -184,7 +179,7 @@ local function loadStyles(metadata)
 
             for _, name in pairs(styles.editable) do
 
-                if map[name] and map[name].getValue and style[name] ~= nil then
+                if style[name] ~= nil and map[name] and map[name].getValue then
 
                     style[name] = map[name].getValue(style[name])
                 end
@@ -253,17 +248,17 @@ local function lastChanges(line)
         return string.format("%s=%s", p, val / 100)
     end)
 
+    local alignments = {
+
+        ["4"] = "9",
+        ["5"] = "10",
+        ["6"] = "11",
+        ["7"] = "5",
+        ["8"] = "6",
+        ["9"] = "7"
+    }
+
     line = string.gsub(line, "(Alignment)=([4-9])", function(p, val)
-
-        local alignments = {
-
-            ["4"] = "9",
-            ["5"] = "10",
-            ["6"] = "11",
-            ["7"] = "5",
-            ["8"] = "6",
-            ["9"] = "7"
-        }
 
         return string.format("%s=%s", p, alignments[val])
     end)
@@ -283,9 +278,7 @@ local function getStyleOverrides()
         table.insert(overrides, v)
     end
 
-    if #overrides == 0 then return "" end
-
-    return table.concat(overrides, ",")
+    return #overrides > 0 and table.concat(overrides, ",") or ""
 end
 
 local function applyStyleOverrides()
@@ -896,8 +889,6 @@ end
 
 local function loadScreenStyles()
 
-    if next(styles.onscreen) ~= nil then return end
-
     local subtitleLinesOnScreen = mp.get_property("sub-text/ass-full", "")
 
     if subtitleLinesOnScreen == "" then return end
@@ -975,22 +966,11 @@ local function reset()
     resampleRes.sHeight = 0
 end
 
-local function saveConfig()
+local function writeToCache()
 
     if not changed then return end
 
-    local configPath = getPath("config")
-
-    if not os.rename(configPath, configPath) then
-
-        if isWindows then
-
-            runCommand({"powershell", "-NoProfile", "-Command", "mkdir", configPath})
-        else
-
-            runCommand({"mkdir", "-p", configPath})
-        end
-    end
+    path.createDir(getPath("cache"))
 
     local file
     local newOverrides = getStyleOverrides()
@@ -999,14 +979,7 @@ local function saveConfig()
 
         for _, k in pairs({"overridefile", "overridefile/converted"}) do
 
-            file = io.open(getPath(k), "r")
-
-            if file then
-
-                file:close()
-
-                os.remove(getPath(k))
-            end
+            path.removeFile(getPath(k))
         end
 
         return
@@ -1014,45 +987,28 @@ local function saveConfig()
 
     for _, k in pairs({"overridefile", "overridefile/converted"}) do
 
-        file = io.open(getPath(k), "w")
+        local ok = path.createFile(getPath(k), k == "overridefile" and utils.format_json(styles.overrides) or newOverrides)
 
-        if not file then
-
-            mp.osd_message("Config file not created!", 3)
-        else
-
-            file:write(k == "overridefile" and utils.format_json(styles.overrides) or newOverrides)
-            file:close()
-        end
+        if not ok then mp.osd_message("Config file not created!", 3) end
     end
 
     print(string.format("Saved style overrides: \"%s\"", newOverrides))
 end
 
-local function readConfig(fileType)
-
-    local file
+local function readFromCache(fileType)
 
     if fileType == "overridefile" then
 
-        local file = io.open(getPath(fileType), "r")
+        local content = path.readFile(getPath(fileType))
 
-        if not file then return end
-
-        local content = file:read("*all")
-
-        file:close()
+        if not content then return end
 
         styles.overrides = utils.parse_json(content)
     elseif fileType == "overridefile/converted" then
 
-        local file = io.open(getPath(fileType), "r")
+        local content = path.readFile(getPath(fileType))
 
-        if not file then return end
-
-        local content = file:read("*all")
-
-        file:close()
+        if not content then return end
 
         print(string.format("Loaded style overrides: \"%s\"", content))
 
@@ -1093,12 +1049,12 @@ local function toggle(section)
 
         if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resampleRes.sWidth, resampleRes.sHeight, resampleRes.dWidth, resampleRes.dHeight)) end
 
-        readConfig("overridefile")
+        readFromCache("overridefile")
         render()
         setBindings(section)
     else
 
-        saveConfig()
+        writeToCache()
         unsetBindings(section)
         updateOverlay("", 0, 0)
 
@@ -1467,12 +1423,12 @@ end
 
 function setBindings(section)
 
-    for name, binding in pairs(bindingList(section)) do mp.add_forced_key_binding(binding.key, "stylemanager_"..name, binding.func, binding.opts) end
+    for name, binding in pairs(bindingList(section)) do mp.add_forced_key_binding(binding.key, "stylesmanager_"..name, binding.func, binding.opts) end
 end
 
 function unsetBindings(section)
 
-    for name in pairs(bindingList(section)) do mp.remove_key_binding("stylemanager_"..name) end
+    for name in pairs(bindingList(section)) do mp.remove_key_binding("stylesmanager_"..name) end
 end
 
 mp.observe_property("osd-dimensions", "native", function (_, value)
@@ -1489,6 +1445,6 @@ mp.observe_property("sid", "number", function(_, value)
     if opened then toggle(page) end
 end)
 
-mp.register_event("file-loaded", function() readConfig("overridefile/converted") end)
+mp.register_event("file-loaded", function() readFromCache("overridefile/converted") end)
 
 mp.add_key_binding(nil, "stylesmanager", function() toggle(page) end)
