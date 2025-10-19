@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.5             ║
+║             v1.0.6             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -16,11 +16,12 @@ local assline = require "assline"
 local input   = require "input"
 local config  = {
 
-    font_size          = 18,
-    hint_font_size     = 11,
-    padding            = 20,
+    font_size          = 30,
+    hint_font_size     = 19,
+    padding            = 30,
     my_style           = "",
-    properties_to_hide = "SecondaryColour,MarginL,MarginR"
+    properties_to_hide = "SecondaryColour,MarginL,MarginR",
+    max_item           = 20
 }
 
 options.read_options(config, "stylesmanager")
@@ -37,7 +38,7 @@ local colors               = {selected = "FFFF00"}
 local data                 = {}
 local opened               = false
 local changed              = false
-local resample             = {sx = 0, sy = 0, tx = 1920, ty = 1080}
+local resampleRes          = {sWidth = 0, sHeight = 0, dWidth = 1920, dHeight = 1080}
 
 local function hash(str)
 
@@ -136,11 +137,19 @@ local function log(str)
     end
 end
 
+local function getScaledResolution()
+
+    local w, h        = mp.get_osd_size()
+    local scaleFactor = h / 1080
+
+    return w / scaleFactor, h / scaleFactor
+end
+
 local function fillData()
 
-    data.screenWidth, data.screenHeight = mp.get_osd_size()
+    data.screenWidth, data.screenHeight = getScaledResolution()
     data.borderSize                     = mp.get_property_number('osd-border-size')
-    data.columns                        = {0, calculateTextWidth(string.rep("A", 15), config.font_size)}
+    data.columns                        = {0, calculateTextWidth("Transition Color", config.font_size) * 2 + config.padding}
     data.tab                            = string.rep("\\h", 4)
     data.propertyNames                  = {
 
@@ -159,7 +168,7 @@ local function fillData()
         MarginR         = "Right Align"
     }
     data.editedSymbol                   = "*"
-    data.rx, data.ry                    = resample.sx / resample.tx, resample.sy / resample.ty
+    data.rx, data.ry                    = resampleRes.sWidth / resampleRes.dWidth, resampleRes.sHeight / resampleRes.dHeight
 end
 
 local function loadStyles(metadata)
@@ -697,11 +706,21 @@ local function render()
         ass:an(7)
         ass:pos(config.padding, lineY)
         ass:append(string.format("{\\bord%s\\b1\\fs%s}", data.borderSize, config.font_size))
-        ass:append(string.format("(%s) Styles", #styles.original))
+        ass:append(string.format("[%s/%s] Styles", index.styles, #styles.original))
 
         lineY = lineY + config.font_size
 
-        for i = 1, #styles.original do
+        local halfItems = math.floor(config.max_item / 2)
+        local sIndex    = math.max(index.styles - halfItems, 1)
+        local mIndex    = sIndex + config.max_item - 1
+
+        if mIndex > #styles.original then
+
+            mIndex = #styles.original
+            sIndex = math.max(mIndex - config.max_item + 1, 1)
+        end
+
+        for i = sIndex, mIndex do
 
             local styleName = styles.original[i].Name
             local edited    = styles.overrides[styleName]
@@ -772,18 +791,6 @@ local function render()
             else
 
                 local text, textWithCursor = input.texts()
-
-                --[[
-                local editBarWidth         = calculateTextWidth(text, config.font_size) + config.padding * 2
-
-                ass:new_event()
-                ass:an(7)
-                ass:pos(config.padding + data.columns[2], lineY)
-                ass:append(string.format("{\\bord0\\1c&H%s&\\1a&H%x&}", "FFFFFF", 0))
-                ass:draw_start()
-                ass:round_rect_cw(0, 0, editBarWidth, config.font_size, 0, 0)
-                ass:draw_stop()
-                ]]
 
                 --input
 
@@ -953,18 +960,18 @@ end
 
 local function reset()
 
-    styles.original  = {}
-    styles.overrides = {}
-    styles.onscreen  = {}
-    styles.editable  = {}
-    index.styles     = 1
-    index.editstyle  = 1
-    data             = {}
-    map              = {}
-    page             = "styles"
-    changed          = false
-    resample.sx      = 0
-    resample.sy      = 0
+    styles.original     = {}
+    styles.overrides    = {}
+    styles.onscreen     = {}
+    styles.editable     = {}
+    index.styles        = 1
+    index.editstyle     = 1
+    data                = {}
+    map                 = {}
+    page                = "styles"
+    changed             = false
+    resampleRes.sWidth  = 0
+    resampleRes.sHeight = 0
 end
 
 local function saveConfig()
@@ -1054,8 +1061,8 @@ local function toggle(section)
 
         if metadata == "" then mp.osd_message("No style data found.", 3) return end
 
-        resample.sx = tonumber(metadata:match("PlayResX: (%d+)")) or 0
-        resample.sy = tonumber(metadata:match("PlayResY: (%d+)")) or 0
+        resampleRes.sWidth  = tonumber(metadata:match("PlayResX: (%d+)")) or 0
+        resampleRes.sHeight = tonumber(metadata:match("PlayResY: (%d+)")) or 0
 
         fillData()
         loadScreenStyles()
@@ -1075,9 +1082,9 @@ local function toggle(section)
             return
         end
 
-        local shouldResample = resample.sx > 0 and resample.sx ~= resample.tx and resample.sy > 0 and resample.sy ~= resample.ty
+        local shouldResample = resampleRes.sWidth > 0 and resampleRes.sWidth ~= resampleRes.dWidth and resampleRes.sHeight > 0 and resampleRes.sHeight ~= resampleRes.dHeight
 
-        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resample.sx, resample.sy, resample.tx, resample.ty)) end
+        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resampleRes.sWidth, resampleRes.sHeight, resampleRes.dWidth, resampleRes.dHeight)) end
 
         readConfig("overridefile")
         render()
@@ -1277,7 +1284,7 @@ local function bindingList(section)
                     if config.my_style == "" then return end
 
                     local changed        = false
-                    local shouldResample = resample.sx > 0 and resample.sx ~= resample.tx and resample.sy > 0 and resample.sy ~= resample.ty
+                    local shouldResample = resampleRes.sWidth > 0 and resampleRes.sWidth ~= resampleRes.dWidth and resampleRes.sHeight > 0 and resampleRes.sHeight ~= resampleRes.dHeight
 
                     for p, v in config.my_style:gmatch("([^:,]+):([^:,]+)") do
 

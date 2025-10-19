@@ -9,16 +9,19 @@ Allows you to modify style properties in ASS subtitles. Want to resize dialogue 
 **Important: If inline tags are present, your changes will have no visible effect.**
 
 # Installation
-Place `stylesmanager` folder into your scripts directory.
+Place `scripts` and `script-opts` folders into your config directory.
+
+| OS                 | Location         |
+| ------------------ | ---------------- |
+| GNU/Linux or macOS | `~/.config/mpv/` |
+| Windows            | `%appdata%/mpv/` |
 
 # Configuration
-Create a file named `stylesmanager.conf` in the script-opts directory, and copy the content below into it. You can now modify the settings as desired.
-
 ```ini
 # OSD Settings
-font_size=18
-hint_font_size=11
-padding=20
+font_size=30
+hint_font_size=19
+padding=30
 
 # Default Style
 # You can apply the properties you've defined here to the selected style with a single key press.
@@ -33,7 +36,7 @@ properties_to_hide=SecondaryColour,MarginL,MarginR
 ```
 
 # Key Bindings
-By default, no keys are assigned. You can create your own bindings in input.conf:
+By default, no keys are assigned. You can create your own bindings in `input.conf`:
 
 ```
 Ctrl+b script-binding stylesmanager
@@ -41,6 +44,3 @@ Ctrl+b script-binding stylesmanager
 
 # Saving
 When you modify a style, it affects all files in that directory.
-
-# Planned Features
-- Scroll
