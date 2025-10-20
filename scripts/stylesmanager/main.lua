@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.8             ║
+║             v1.0.9             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -298,7 +298,7 @@ local function generateMap()
 
             setRange = function()
 
-                input.max = 50
+                input.max = 70
             end
         },
 
@@ -504,7 +504,7 @@ local function generateMap()
 
                 v = tonumber(v)
 
-                return tostring(math.floor(v * data.ry + 0.5))
+                return tostring(math.floor(v * data.ry))
             end
         },
 
@@ -539,7 +539,9 @@ local function generateMap()
 
                 v = tonumber(v)
 
-                return string.format("%.1f", v * data.ry + 0.5)
+                if v == 0 then return "0" end
+
+                return string.format("%.1f", v * data.ry)
             end
         },
 
@@ -574,7 +576,9 @@ local function generateMap()
 
                 v = tonumber(v)
 
-                return string.format("%.1f", v * data.ry + 0.5)
+                if v == 0 then return "0" end
+
+                return string.format("%.1f", v * data.ry)
             end
         },
 
@@ -1020,9 +1024,13 @@ local function toggle(section)
 
     if not opened then
 
+        local overrideMode = mp.get_property("sub-ass-override", "")
+
+        if not (overrideMode == "yes" or overrideMode == "scale") then mp.osd_message("Style override functionality only works with \"--sub-ass-override=yes\" or \"--sub-ass-override=scale\".", 3) return end
+
         local metadata = mp.get_property("sub-ass-extradata", "")
 
-        if metadata == "" then mp.osd_message("Missing metadata.", 3) return end
+        if metadata == "" then mp.osd_message("Missing metadata! This is not an ASS file.", 3) return end
 
         resampleRes.sWidth  = tonumber(metadata:match("PlayResX: (%d+)")) or 0
         resampleRes.sHeight = tonumber(metadata:match("PlayResY: (%d+)")) or 0
@@ -1044,10 +1052,6 @@ local function toggle(section)
 
             return
         end
-
-        local shouldResample = resampleRes.sWidth > 0 and resampleRes.sWidth ~= resampleRes.dWidth and resampleRes.sHeight > 0 and resampleRes.sHeight ~= resampleRes.dHeight
-
-        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resampleRes.sWidth, resampleRes.sHeight, resampleRes.dWidth, resampleRes.dHeight)) end
 
         readFromCache("overridefile")
         render()
@@ -1277,6 +1281,8 @@ local function bindingList(section)
                     end
 
                     if changed then
+
+                        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resampleRes.sWidth, resampleRes.sHeight, resampleRes.dWidth, resampleRes.dHeight)) end
 
                         applyStyleOverrides()
                         render()
