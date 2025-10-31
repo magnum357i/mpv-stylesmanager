@@ -2,7 +2,7 @@
 
 ╔════════════════════════════════╗
 ║        MPV stylesmanager       ║
-║             v1.0.9             ║
+║             v1.1.0             ║
 ╚════════════════════════════════╝
 
 Style Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
@@ -20,9 +20,18 @@ local config  = {
     font_size          = 30,
     hint_font_size     = 19,
     padding            = 30,
-    my_style           = "",
+    style1             = "",
+    style2             = "",
+    style3             = "",
+    style4             = "",
+    style5             = "",
+    style6             = "",
+    style7             = "",
+    style8             = "",
+    style9             = "",
     properties_to_hide = "SecondaryColour,MarginL,MarginR",
-    max_item           = 20
+    max_items          = 20,
+    sort_by_name       = false
 }
 
 options.read_options(config, "stylesmanager")
@@ -31,15 +40,17 @@ local overlay              = mp.create_osd_overlay("ass-events")
 local textOverlay          = mp.create_osd_overlay("ass-events")
 textOverlay.compute_bounds = true
 textOverlay.hidden         = true
-local styles               = {original = {}, overrides = {}, onscreen = {}, editable = {}}
+local styles               = {original = {}, overrides = {}, onscreen = {}, editable = {}, user = {}}
 local page                 = "styles"
-local index                = {styles = 1, editstyle = 1}
+local prevPage             = ""
+local index                = {styles = 1, editstyle = 1, userstyles = 1}
 local map                  = {}
 local colors               = {selected = "FFFF00"}
 local data                 = {}
 local opened               = false
 local changed              = false
-local resampleRes          = {sWidth = 0, sHeight = 0, dWidth = 1920, dHeight = 1080}
+local resampleRes          = {sWidth = 1920, sHeight = 1080, dWidth = 0, dHeight = 0}
+local scrollOffset         = 1
 
 local function hash(str)
 
@@ -165,28 +176,31 @@ local function fillData()
         MarginR         = "Right Align"
     }
     data.editedSymbol                   = "*"
-    data.rx, data.ry                    = resampleRes.sWidth / resampleRes.dWidth, resampleRes.sHeight / resampleRes.dHeight
-    data.columns                        = {0, calculateTextWidth(string.format("{\\bord%s\\b1\\fs%s}● %s%s", data.borderSize, config.font_size, data.editedSymbol, string.rep("A", 14)))}
+    data.rx, data.ry                    = resampleRes.dWidth / resampleRes.sWidth, resampleRes.dHeight / resampleRes.sHeight
+    data.columnSpaces                   = {0, calculateTextWidth(string.format("{\\bord%s\\b1\\fs%s}● %s%s", data.borderSize, config.font_size, data.editedSymbol, string.rep("A", 14)))}
 end
 
 local function loadStyles(metadata)
 
-    for style in metadata:gmatch("Style:[^\n]+") do
+    for style in assline:styles(metadata) do
 
-        style = assline:new(style)
+        for _, name in pairs(styles.editable) do
 
-        if style then
+            if style[name] ~= nil and map[name] and map[name].getValue then
 
-            for _, name in pairs(styles.editable) do
-
-                if style[name] ~= nil and map[name] and map[name].getValue then
-
-                    style[name] = map[name].getValue(style[name])
-                end
+                style[name] = map[name].getValue(style[name])
             end
-
-            table.insert(styles.original, style)
         end
+
+        table.insert(styles.original, style)
+    end
+
+    if config.sort_by_name then
+
+        table.sort(styles.original, function(a, b)
+
+            return a.Name < b.Name
+        end)
     end
 end
 
@@ -231,9 +245,7 @@ local function serializeStyle(styleName, style)
         end
     end
 
-    if #list == 0 then return "" end
-
-    return table.concat(list, ",")
+    return next(list) == nil and "" or table.concat(list, ",")
 end
 
 local function lastChanges(line)
@@ -278,7 +290,7 @@ local function getStyleOverrides()
         table.insert(overrides, v)
     end
 
-    return #overrides > 0 and table.concat(overrides, ",") or ""
+    return next(overrides) == nil and "" or table.concat(overrides, ",")
 end
 
 local function applyStyleOverrides()
@@ -695,172 +707,48 @@ end
 
 local function render()
 
-    local lineY = config.padding
     local ass   = assdraw.ass_new()
+    local lineY = config.padding
 
-    if page == "styles" then
+    ass:new_event()
+    ass:an(7)
+    ass:pos(config.padding, lineY)
+    ass:append(pages[page].title())
 
-        ass:new_event()
-        ass:an(7)
-        ass:pos(config.padding, lineY)
-        ass:append(string.format("{\\bord%s\\b1\\fs%s}", data.borderSize, config.font_size))
-        ass:append(string.format("[%s/%s] Styles", index.styles, #styles.original))
+    lineY = lineY + config.font_size
 
-        lineY = lineY + config.font_size
-
-        local halfItems = math.floor(config.max_item / 2)
-        local sIndex    = math.max(index.styles - halfItems, 1)
-        local mIndex    = sIndex + config.max_item - 1
-
-        if mIndex > #styles.original then
-
-            mIndex = #styles.original
-            sIndex = math.max(mIndex - config.max_item + 1, 1)
-        end
-
-        for i = sIndex, mIndex do
-
-            local styleName = styles.original[i].Name
-            local edited    = styles.overrides[styleName]
-
-            ass:new_event()
-            ass:an(7)
-            ass:pos(config.padding + data.columns[1], lineY)
-            ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size))
-
-            if styles.onscreen[styleName] then
-
-                ass:append(string.format("{\\c%s}", colors.selected))
-            end
-
-            if i == index.styles then
-
-                ass:append(string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", styleName))
-            else
-
-                ass:append(string.format("○ %s%s", edited and data.editedSymbol or "", styleName))
-            end
-
-            lineY = lineY + config.font_size
-        end
-    elseif page == "editstyle" or page == "editvalue" then
-
-        local styleName = styles.original[index.styles].Name
+    for columns in pages[page].rows() do
 
         ass:new_event()
         ass:an(7)
-        ass:pos(config.padding, lineY)
-        ass:append(string.format("{\\bord%s\\b1\\fs%s}", data.borderSize, config.font_size))
-        ass:append(string.format("← Edit style: \"%s\"", styleName))
+        ass:pos(config.padding + data.columnSpaces[1], lineY)
+        ass:append(columns[1])
 
-        lineY = lineY + config.font_size
+        if columns[2] then
 
-        for i, property in pairs(styles.editable) do
-
-            local edited = styles.overrides[styleName] and styles.overrides[styleName][property]
-
-            ass:new_event()
-            ass:an(7)
-            ass:pos(config.padding + data.columns[1], lineY)
-            ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size))
-
-            if i == index.editstyle then
-
-                ass:append(string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", data.propertyNames[property] or property))
-            else
-
-                ass:append(string.format("○ %s%s", edited and data.editedSymbol or "", data.propertyNames[property] or property))
-            end
-
-            if page == "editstyle" or (page == "editvalue" and i ~= index.editstyle) then
+            for _, c in ipairs(columns[2]) do
 
                 ass:new_event()
                 ass:an(7)
-                ass:pos(config.padding + data.columns[2], lineY)
-                ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size))
-
-                if edited then
-
-                    ass:append(styles.overrides[styleName][property])
-                else
-
-                    ass:append(styles.original[index.styles][property])
-                end
-            else
-
-                local text, textWithCursor = input.texts()
-
-                --input
-
-                ass:new_event()
-                ass:an(7)
-                ass:pos(config.padding + data.columns[2], lineY)
-                ass:append(text)
-
-                --cursor
-
-                ass:new_event()
-                ass:pos(config.padding + data.columns[2], lineY)
-                ass:append(textWithCursor)
+                ass:pos(config.padding + data.columnSpaces[2], lineY)
+                ass:append(c)
             end
-
-            lineY = lineY + config.font_size
         end
+
+        lineY = lineY + config.font_size
     end
 
-    lineY = lineY + config.padding
+    lineY = lineY + config.font_size
 
-    ass:new_event()
-    ass:an(7)
-    ass:pos(config.padding, lineY)
-    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-    ass:append("Navigation")
-
-    lineY = lineY + config.hint_font_size * 1.5
-
-    ass:new_event()
-    ass:an(7)
-    ass:pos(config.padding, lineY)
-    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-    ass:append(string.format("%s"..data.tab.."%s", "<LEFT-RIGHT> Back / Edit", "<UP-DOWN> Prev / Next Item"))
-
-    lineY = lineY + config.hint_font_size * 1.5
-
-    ass:new_event()
-    ass:an(7)
-    ass:pos(config.padding, lineY)
-    ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-    ass:append("Actions")
-
-    if page == "styles" then
-
-        lineY = lineY + config.hint_font_size * 1.5
+    for rowText in pages[page].hint() do
 
         ass:new_event()
         ass:an(7)
         ass:pos(config.padding, lineY)
-        ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-        ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s", "<DEL> Reset", "<SHIFT+DEL> Reset all", "<ESC> Exit"))
+        ass:append(rowText)
 
-        lineY = lineY + config.hint_font_size + config.padding
-
-        ass:new_event()
-        ass:an(7)
-        ass:pos(config.padding, lineY)
-        ass:append(string.format("{\\bord%s\\fs%s}", data.borderSize, config.hint_font_size))
-        ass:append("Styles of the lines currently visible on screen will be highlighted in yellow.")
-    else
-
-        lineY = lineY + config.hint_font_size * 1.5
-
-        ass:new_event()
-        ass:an(7)
-        ass:pos(config.padding, lineY)
-        ass:append(string.format("{\\bord%s\\b0\\fs%s}", data.borderSize, config.hint_font_size))
-        ass:append(string.format("%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s"..data.tab.."%s", "<ENTER> Confirm", "<DEL> Reset value", "<SHIFT+DEL> Reset style", "<O> Load your style", "<ESC> Exit"))
+        lineY = lineY + config.hint_font_size
     end
-
-    --update
 
     updateOverlay(ass.text)
 end
@@ -884,11 +772,6 @@ local function handleEdit()
 
         input.default(styles.original[index.styles][p])
     end
-
-    unsetBindings("editstyle")
-    setBindings("editvalue")
-
-    render()
 end
 
 local function loadScreenStyles()
@@ -897,11 +780,27 @@ local function loadScreenStyles()
 
     if subtitleLinesOnScreen == "" then return end
 
-    for line in subtitleLinesOnScreen:gmatch("Dialogue:[^\n]+") do
+    subtitleLinesOnScreen = "\n"..subtitleLinesOnScreen
 
-        line = assline:new(line)
+    for line in assline:lines(subtitleLinesOnScreen) do
 
-        if line then styles.onscreen[line.Style] = true end
+        styles.onscreen[line.Style] = true
+    end
+end
+
+local function loadUserStyles()
+
+    for i = 1, 9 do
+
+        if config["style"..i] ~= "" then
+
+            local styleName = config["style"..i]:match("Name:([^,]*)")
+
+            if styleName then
+
+                table.insert(styles.user, {index = i, name = styleName})
+            end
+        end
     end
 end
 
@@ -960,14 +859,17 @@ local function reset()
     styles.overrides    = {}
     styles.onscreen     = {}
     styles.editable     = {}
+    styles.user         = {}
     index.styles        = 1
     index.editstyle     = 1
     data                = {}
     map                 = {}
     page                = "styles"
+    prevPage            = ""
     changed             = false
-    resampleRes.sWidth  = 0
-    resampleRes.sHeight = 0
+    resampleRes.dWidth  = 0
+    resampleRes.dHeight = 0
+    scrollOffset        = 1
 end
 
 local function writeToCache()
@@ -1020,7 +922,48 @@ local function readFromCache(fileType)
     end
 end
 
-local function toggle(section)
+local function applyUserStyle()
+
+    local userStyle = config["style"..styles.user[index.userstyles].index]
+
+    if userStyle == "" then return end
+
+    local shouldResample = resampleRes.dWidth > 0 and resampleRes.dWidth ~= resampleRes.sWidth and resampleRes.dHeight > 0 and resampleRes.dHeight ~= resampleRes.sHeight
+    userStyle            = userStyle:gsub("Name:[^,]*", "")
+
+    for p, v in userStyle:gmatch("([^:,]+):([^:,]+)") do
+
+        input.init()
+        input.font_size = config.font_size
+
+        if map[p] then
+
+            map[p].setRange()
+
+            v = map[p].getValue and map[p].getValue(v) or v
+
+            if input.default(v) then
+
+                changeValue(shouldResample and map[p].resample and map[p].resample(input.get_text()) or input.get_text(), p)
+            else
+
+                mp.msg.warn(string.format("Value is out of allowed range: %s (%s)", v, p))
+            end
+        else
+
+            mp.msg.warn(string.format("This property has no defined handler: %s", p))
+        end
+    end
+
+    if changed then
+
+        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resampleRes.sWidth, resampleRes.sHeight, resampleRes.dWidth, resampleRes.dHeight)) end
+
+        applyStyleOverrides()
+    end
+end
+
+local function toggle()
 
     if not opened then
 
@@ -1032,11 +975,11 @@ local function toggle(section)
 
         if metadata == "" then mp.osd_message("Missing metadata! This is not an ASS file.", 3) return end
 
-        resampleRes.sWidth  = tonumber(metadata:match("PlayResX: (%d+)")) or 0
-        resampleRes.sHeight = tonumber(metadata:match("PlayResY: (%d+)")) or 0
+        resampleRes.dWidth, resampleRes.dHeight = assline:resolution(metadata)
 
         fillData()
         loadScreenStyles()
+        loadUserStyles()
 
         map             = generateMap()
         styles.editable = getEditableValues()
@@ -1055,11 +998,11 @@ local function toggle(section)
 
         readFromCache("overridefile")
         render()
-        setBindings(section)
+        setBindings()
     else
 
         writeToCache()
-        unsetBindings(section)
+        unsetBindings()
         updateOverlay("", 0, 0)
 
         input.reset()
@@ -1070,371 +1013,664 @@ local function toggle(section)
     opened = not opened
 end
 
-local function bindingList(section)
+local function switchPage(name)
 
-    local inputBindings, defaultBindings = {}, {}
+    prevPage = page
 
-    if section == "styles" then
+    unsetBindings()
 
-        defaultBindings = {
+    page = name
 
-            close = {
+    setBindings()
+end
 
-                key  = "esc",
-                func = function ()
+pages = {
 
-                    toggle("styles")
-                end,
-                opts = nil
-            },
+    styles = {
 
-            previtem = {
+        title = function()
 
-                key  = "up",
-                func = function ()
+            return string.format("{\\bord%s\\b1\\fs%s}[%s/%s] %s", data.borderSize, config.font_size, index.styles, #styles.original, "Styles")
+        end,
 
-                    index.styles = math.max(index.styles - 1, 1)
+        rows = function()
 
-                    render()
-                end,
-                opts = {repeatable = true}
-            },
+            local i = scrollOffset
+            local n = 1
 
-            nextitem = {
+            return function()
 
-                key  = "down",
-                func = function ()
+                if not styles.original[i] or n > config.max_items then return nil end
 
-                    index.styles = math.min(index.styles + 1, #styles.original)
+                local columns   = {""}
+                local styleName = styles.original[i].Name
+                local edited    = styles.overrides[styleName]
 
-                    render()
-                end,
-                opts = {repeatable = true}
-            },
+                columns[1] = columns[1]..string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size)
 
-            editstyle = {
+                if styles.onscreen[styleName] then
 
-                key  = "right",
-                func = function ()
-
-                    page = "editstyle"
-
-                    unsetBindings("styles")
-                    setBindings("editstyle")
-
-                    render()
-                end,
-                opts = {repeatable = true}
-            },
-
-            disableback = {
-
-                key  = "left",
-                func = function ()
-
-                end,
-                opts = nil
-            },
-
-            resetstyle = {
-
-                key  = "del",
-                func = function ()
-
-                    resetValue()
-                    applyStyleOverrides()
-                    render()
-                end,
-                opts = nil
-            },
-
-            resetallstyles = {
-
-                key  = "shift+del",
-                func = function ()
-
-                    resetValue(true)
-                    applyStyleOverrides()
-                    render()
-                end,
-                opts = nil
-            },
-
-            disableenter = {
-
-                key  = "enter",
-                func = function ()
-
-                end,
-                opts = nil
-            },
-        }
-    elseif section == "editstyle" then
-
-        defaultBindings = {
-
-            close = {
-
-                key  = "esc",
-                func = function ()
-
-                    toggle("editstyle")
-                end,
-                opts = nil
-            },
-
-            previtem = {
-
-                key  = "up",
-                func = function ()
-
-                    index.editstyle = math.max(index.editstyle - 1, 1)
-
-                    render()
-                end,
-                opts = {repeatable = true}
-            },
-
-            nextitem = {
-
-                key  = "down",
-                func = function ()
-
-                    index.editstyle = math.min(index.editstyle + 1, #styles.editable)
-
-                    render()
-                end,
-                opts = {repeatable = true}
-            },
-
-            editvalue = {
-
-                key  = "right",
-                func = function ()
-
-                    page = "editvalue"
-
-                    handleEdit()
-                end,
-                opts = nil
-            },
-
-            resetvalue = {
-
-                key  = "del",
-                func = function ()
-
-                    resetValue()
-                    applyStyleOverrides()
-                    render()
-                end,
-                opts = nil
-            },
-
-            resetstyle = {
-
-                key  = "shift+del",
-                func = function ()
-
-                    resetValue(true)
-                    applyStyleOverrides()
-                    render()
-                end,
-                opts = nil
-            },
-
-            loadefaultstyle = {
-
-                key  = "o",
-                func = function ()
-
-                    if config.my_style == "" then return end
-
-                    local changed        = false
-                    local shouldResample = resampleRes.sWidth > 0 and resampleRes.sWidth ~= resampleRes.dWidth and resampleRes.sHeight > 0 and resampleRes.sHeight ~= resampleRes.dHeight
-
-                    for p, v in config.my_style:gmatch("([^:,]+):([^:,]+)") do
-
-                        input.init()
-
-                        input.font_size = config.font_size
-
-                        if map[p] then
-
-                            map[p].setRange()
-
-                            v = map[p].getValue and map[p].getValue(v) or v
-
-                            if input.default(v) then
-
-                                changed = true
-
-                                changeValue(shouldResample and map[p].resample and map[p].resample(input.get_text()) or input.get_text(), p)
-                            else
-
-                                mp.msg.warn(string.format("Value is out of allowed range: %s (%s)", v, p))
-                            end
-                        else
-
-                            mp.msg.warn(string.format("This property has no defined handler: %s", p))
-                        end
-                    end
-
-                    if changed then
-
-                        if shouldResample then print(string.format("Resampling applied: %sx%s > %sx%s", resampleRes.sWidth, resampleRes.sHeight, resampleRes.dWidth, resampleRes.dHeight)) end
-
-                        applyStyleOverrides()
-                        render()
-                    end
-                end,
-                opts = nil
-            },
-
-            backstyles = {
-
-                key  = "left",
-                func = function ()
-
-                    page = "styles"
-
-                    unsetBindings("editstyle")
-                    setBindings("styles")
-
-                    render()
-                end,
-                opts = nil
-            },
-
-            disableenter = {
-
-                key  = "enter",
-                func = function ()
-
-                end,
-                opts = nil
-            },
-        }
-
-        defaultBindings["loadefaultstylealt"] = {
-
-            key  = "O",
-            func = defaultBindings["loadefaultstyle"].func,
-            opts = defaultBindings["loadefaultstyle"].opts
-        }
-    elseif section == "editvalue" then
-
-        inputBindings = input.bindings({
-
-            after_changes = function()
-
-                render()
-            end,
-
-            edit_clipboard = function(text)
-
-                local property = styles.editable[index.editstyle]
-
-                if property and string.find(property, "Colour") and #text == 6 then
-
-                    text = text..",00"
+                    columns[1] = columns[1]..string.format("{\\c%s}", colors.selected)
                 end
 
-                return text
+                if i == index.styles then
+
+                    columns[1] = columns[1]..string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", styleName)
+                else
+
+                    columns[1] = columns[1]..string.format("○ %s%s", edited and data.editedSymbol or "", styleName)
+                end
+
+                i = i + 1
+                n = n + 1
+
+                return columns
             end
-        })
+        end,
 
-        defaultBindings = {
+        hint = function()
 
-            close = {
+            local hints = {}
 
-                key  = "esc",
-                func = function ()
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s", data.borderSize, config.hint_font_size, "Navigation"))
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s%s", data.borderSize, config.hint_font_size, "<RIGHT> Edit", data.tab.."<UP-DOWN> Prev / Next Item"))
+            table.insert(hints, "")
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s", data.borderSize, config.hint_font_size, "Actions"))
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s%s%s%s", data.borderSize, config.hint_font_size, "<DEL> Reset", data.tab.."<SHIFT+DEL> Reset all", data.tab.."<O> Load your style", data.tab.."<ESC> Exit"))
+            table.insert(hints, "")
+            table.insert(hints, string.format("{\\bord%s\\fs%s}%s", data.borderSize, config.hint_font_size, "Styles of the lines currently visible on screen will be highlighted in yellow."))
 
-                    page = "editstyle"
+            local i = 1
 
-                    unsetBindings("editvalue")
-                    setBindings("editstyle")
+            return function ()
+
+                local h = hints[i]
+
+                if not h then return nil end
+
+                i = i + 1
+
+                return h
+            end
+        end,
+
+        bindings = function()
+
+            local defaults = {
+
+                close = {
+
+                    key  = "esc",
+                    func = function ()
+
+                        toggle()
+                    end,
+                    opts = nil
+                },
+
+                previtem = {
+
+                    key  = "up",
+                    func = function ()
+
+                        index.styles = math.max(index.styles - 1, 1)
+
+                        local unvisible = scrollOffset - 1
+
+                        if unvisible == index.styles then scrollOffset = scrollOffset - 1 end
+
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                },
+
+                nextitem = {
+
+                    key  = "down",
+                    func = function ()
+
+                        index.styles = math.min(index.styles + 1, #styles.original)
+
+                        local unvisible = scrollOffset + config.max_items
+
+                        if unvisible == index.styles then scrollOffset = scrollOffset + 1 end
+
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                },
+
+                editstyle = {
+
+                    key  = "right",
+                    func = function ()
+
+                        switchPage("editstyle")
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                userstyles = {
+
+                    key  = "o",
+                    func = function ()
+
+                        local userStylesCount = #styles.user
+
+                        if userStylesCount == 1 then
+
+                            applyUserStyle()
+                        elseif userStylesCount > 1 then
+
+                            switchPage("userstyles")
+                        end
+
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                disableback = {
+
+                    key  = "left",
+                    func = function ()
+
+                    end,
+                    opts = nil
+                },
+
+                resetstyle = {
+
+                    key  = "del",
+                    func = function ()
+
+                        resetValue()
+                        applyStyleOverrides()
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                resetallstyles = {
+
+                    key  = "shift+del",
+                    func = function ()
+
+                        resetValue(true)
+                        applyStyleOverrides()
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                disableenter = {
+
+                    key  = "enter",
+                    func = function ()
+
+                    end,
+                    opts = nil
+                }
+            }
+
+            defaults["userstylesalt"] = {
+
+                key  = "O",
+                func = defaults["userstyles"].func,
+                opts = defaults["userstyles"].opts
+            }
+
+            return defaults
+        end
+    },
+
+    editstyle = {
+
+        title = function()
+
+            return string.format("{\\bord%s\\b1\\fs%s}← Edit style: \"%s\"", data.borderSize, config.font_size, styles.original[index.styles].Name)
+        end,
+
+        rows = function()
+
+            local i         = 1
+            local styleName = styles.original[index.styles].Name
+
+            return function()
+
+                if not styles.editable[i] then return nil end
+
+                local columns  = {[1] = "", [2] = {}}
+                local property = styles.editable[i]
+                local edited   = styles.overrides[styleName] and styles.overrides[styleName][property]
+
+                columns[1] = string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size)
+
+                if i == index.editstyle then
+
+                    columns[1] = columns[1]..string.format("{\\b1}● %s%s{\\b0}", edited and data.editedSymbol or "", data.propertyNames[property] or property)
+                else
+
+                    columns[1] = columns[1]..string.format("○ %s%s", edited and data.editedSymbol or "", data.propertyNames[property] or property)
+                end
+
+                if page == "editstyle" or (page == "editvalue" and i ~= index.editstyle) then
+
+                    if edited then
+
+                        table.insert(columns[2], string.format("{\\bord%s\\fs%s}%s", data.borderSize, config.font_size, styles.overrides[styleName][property]))
+                    else
+
+                        table.insert(columns[2], string.format("{\\bord%s\\fs%s}%s", data.borderSize, config.font_size, styles.original[index.styles][property]))
+                    end
+                else
+
+                    local text, textWithCursor = input.texts()
+
+                    table.insert(columns[2], text)
+                    table.insert(columns[2], textWithCursor)
+                end
+
+                i = i + 1
+
+                return columns
+            end
+        end,
+
+        hint = function()
+
+            local hints = {}
+
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s", data.borderSize, config.hint_font_size, "Navigation"))
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s%s", data.borderSize, config.hint_font_size, "<LEFT-RIGHT> Back / Edit", data.tab.."<UP-DOWN> Prev / Next Item"))
+            table.insert(hints, "")
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s", data.borderSize, config.hint_font_size, "Actions"))
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s%s%s%s%s", data.borderSize, config.hint_font_size, "<ENTER> Confirm", data.tab.."<DEL> Reset value", data.tab.."<SHIFT+DEL> Reset style", data.tab.."<O> Load your style", data.tab.."<ESC> Exit"))
+
+            local i = 1
+
+            return function ()
+
+                local h = hints[i]
+
+                if not h then return nil end
+
+                i = i + 1
+
+                return h
+            end
+        end,
+
+        bindings = function()
+
+            local defaults = {
+
+                close = {
+
+                    key  = "esc",
+                    func = function ()
+
+                        toggle()
+                    end,
+                    opts = nil
+                },
+
+                previtem = {
+
+                    key  = "up",
+                    func = function ()
+
+                        index.editstyle = math.max(index.editstyle - 1, 1)
+
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                },
+
+                nextitem = {
+
+                    key  = "down",
+                    func = function ()
+
+                        index.editstyle = math.min(index.editstyle + 1, #styles.editable)
+
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                },
+
+                editvalue = {
+
+                    key  = "right",
+                    func = function ()
+
+                        switchPage("editvalue")
+                        handleEdit()
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                resetvalue = {
+
+                    key  = "del",
+                    func = function ()
+
+                        resetValue()
+                        applyStyleOverrides()
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                resetstyle = {
+
+                    key  = "shift+del",
+                    func = function ()
+
+                        resetValue(true)
+                        applyStyleOverrides()
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                userstyles = {
+
+                    key  = "o",
+                    func = function ()
+
+                        local userStylesCount = #styles.user
+
+                        if userStylesCount == 1 then
+
+                            applyUserStyle()
+                        elseif userStylesCount > 1 then
+
+                            switchPage("userstyles")
+                        end
+
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                back = {
+
+                    key  = "left",
+                    func = function ()
+
+                        switchPage("styles")
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                disableenter = {
+
+                    key  = "enter",
+                    func = function ()
+
+                    end,
+                    opts = nil
+                }
+            }
+
+            defaults["userstylesalt"] = {
+
+                key  = "O",
+                func = defaults["userstyles"].func,
+                opts = defaults["userstyles"].opts
+            }
+
+            return defaults
+        end
+    },
+
+    editvalue = {
+
+        title = function()
+
+            return pages.editstyle.title()
+        end,
+
+        rows = function()
+
+            return pages.editstyle.rows()
+        end,
+
+        hint = function()
+
+            return pages.editstyle.hint()
+        end,
+
+        bindings = function()
+
+            local defaults = {
+
+                close = {
+
+                    key  = "esc",
+                    func = function ()
+
+                        switchPage("editstyle")
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                click = {
+
+                    key  = "mbtn_left",
+                    func = function ()
+
+                        switchPage("editstyle")
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                confirm = {
+
+                    key  = "enter",
+                    func = function ()
+
+                        switchPage("editstyle")
+                        changeValue(input.get_text())
+                        applyStyleOverrides()
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                previtem = {
+
+                    key  = "up",
+                    func = function ()
+
+                        changeValue(input.get_text())
+                        applyStyleOverrides()
+
+                        index.editstyle = math.max(index.editstyle - 1, 1)
+
+                        handleEdit()
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                },
+
+                nextitem = {
+
+                    key  = "down",
+                    func = function ()
+
+                        changeValue(input.get_text())
+                        applyStyleOverrides()
+
+                        index.editstyle = math.min(index.editstyle + 1, #styles.editable)
+
+                        handleEdit()
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                }
+            }
+
+            local inputs = input.bindings({
+
+                after_changes = function()
 
                     render()
                 end,
-                opts = nil
-            },
 
-            click = {
+                edit_clipboard = function(text)
 
-                key  = "mbtn_left",
-                func = function ()
+                    local property = styles.editable[index.editstyle]
 
-                    page = "editstyle"
+                    if property and string.find(property, "Colour", 1, true) and #text == 6 then text = text..",00" end
 
-                    unsetBindings("editvalue")
-                    setBindings("editstyle")
+                    return text
+                end
+            })
 
-                    render()
-                end,
-                opts = nil
-            },
+            return tableMerge(defaults, inputs)
+        end
+    },
 
-            enter = {
+    userstyles = {
 
-                key  = "enter",
-                func = function ()
+        title = function()
 
-                    page = "editstyle"
+            return string.format("{\\bord%s\\b1\\fs%s}%s", data.borderSize, config.font_size, "Your styles")
+        end,
 
-                    unsetBindings("editvalue")
-                    setBindings("editstyle")
-                    changeValue(input.get_text())
-                    applyStyleOverrides()
-                    render()
-                end,
-                opts = nil
-            },
+        rows = function()
 
-            previtem = {
+            local i         = 1
+            local styleName = styles.original[index.styles].Name
 
-                key  = "up",
-                func = function ()
+            return function()
 
-                    changeValue(input.get_text())
-                    applyStyleOverrides()
+                if not styles.user[i] then return nil end
 
-                    index.editstyle = math.max(index.editstyle - 1, 1)
+                local columns = {""}
 
-                    handleEdit()
-                end,
-                opts = {repeatable = true}
-            },
+                columns[1] = columns[1]..string.format("{\\bord%s\\fs%s}", data.borderSize, config.font_size)
 
-            disableup = {
+                if i == index.userstyles then
 
-                key  = "down",
-                func = function ()
+                    columns[1] = columns[1]..string.format("{\\b1}● %s{\\b0}", styles.user[i].name)
+                else
 
-                    changeValue(input.get_text())
-                    applyStyleOverrides()
+                    columns[1] = columns[1]..string.format("○ %s", styles.user[i].name)
+                end
 
-                    index.editstyle = math.min(index.editstyle + 1, #styles.editable)
+                i = i + 1
 
-                    handleEdit()
-                end,
-                opts = {repeatable = true}
-            },
-        }
-    end
+                return columns
+            end
+        end,
 
-    return tableMerge(defaultBindings, inputBindings)
+        hint = function()
+
+            local hints = {}
+
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s", data.borderSize, config.hint_font_size, "Navigation"))
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s%s", data.borderSize, config.hint_font_size, "<LEFT> Back", data.tab.."<UP-DOWN> Prev / Next Item"))
+            table.insert(hints, "")
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s", data.borderSize, config.hint_font_size, "Actions"))
+            table.insert(hints, string.format("{\\bord%s\\b0\\fs%s}%s%s", data.borderSize, config.hint_font_size, "<ENTER> Apply", data.tab.."<ESC> Exit"))
+
+            local i = 1
+
+            return function ()
+
+                local h = hints[i]
+
+                if not h then return nil end
+
+                i = i + 1
+
+                return h
+            end
+        end,
+
+        bindings = function()
+
+            local defaults = {
+
+                close = {
+
+                    key  = "esc",
+                    func = function ()
+
+                        toggle()
+                    end,
+                    opts = nil
+                },
+
+                apply = {
+
+                    key  = "enter",
+                    func = function ()
+
+                        applyUserStyle()
+                        switchPage(prevPage)
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                back = {
+
+                    key  = "left",
+                    func = function ()
+
+                        switchPage(prevPage)
+                        render()
+                    end,
+                    opts = nil
+                },
+
+                previtem = {
+
+                    key  = "up",
+                    func = function ()
+
+                        index.userstyles = math.max(index.userstyles - 1, 1)
+
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                },
+
+                nextitem = {
+
+                    key  = "down",
+                    func = function ()
+
+                        index.userstyles = math.min(index.userstyles + 1, #styles.user)
+
+                        render()
+                    end,
+                    opts = {repeatable = true}
+                }
+            }
+
+            return defaults
+        end
+    }
+}
+
+function setBindings()
+
+    for name, binding in pairs(pages[page].bindings()) do mp.add_forced_key_binding(binding.key, "stylesmanager_"..name, binding.func, binding.opts) end
 end
 
-function setBindings(section)
+function unsetBindings()
 
-    for name, binding in pairs(bindingList(section)) do mp.add_forced_key_binding(binding.key, "stylesmanager_"..name, binding.func, binding.opts) end
-end
-
-function unsetBindings(section)
-
-    for name in pairs(bindingList(section)) do mp.remove_key_binding("stylesmanager_"..name) end
+    for name in pairs(pages[page].bindings()) do mp.remove_key_binding("stylesmanager_"..name) end
 end
 
 mp.observe_property("osd-dimensions", "native", function (_, value)
@@ -1448,9 +1684,9 @@ end)
 
 mp.observe_property("sid", "number", function(_, value)
 
-    if opened then toggle(page) end
+    if opened then toggle() end
 end)
 
 mp.register_event("file-loaded", function() readFromCache("overridefile/converted") end)
 
-mp.add_key_binding(nil, "stylesmanager", function() toggle(page) end)
+mp.add_key_binding(nil, "stylesmanager", toggle)
