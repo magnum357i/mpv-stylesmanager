@@ -49,14 +49,25 @@ padding=30
 # Example: 370DE2 (RGB) > E20D37 (BGR) > &H00E20D37 (ASS)
 # You can convert any RGB value to BGR by swapping the first and last two characters. Just remember that the first two characters in an ASS color code represent the alpha channel.
 #
-# Available Properties: Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
-my_style=Fontname:Calibri,Fontsize:72,PrimaryColour:&H00FFFFFF,OutlineColour:&H00000000,Bold:1,MarginV:40,Outline:4.2,Shadow:0,ScaleX:100,ScaleY:100,Spacing:0
+# Available Properties: Name (Required), Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ScaleX, ScaleY, Spacing, Outline, Shadow, Alignment, MarginL, MarginR, MarginV
+style1=Name:General,Fontname:Calibri,Fontsize:72,PrimaryColour:&H00FFFFFF,OutlineColour:&H00000000,Bold:1,MarginV:40,Outline:4.2,Shadow:0,ScaleX:100,ScaleY:100,Spacing:0
+style2=
+style3=
+style4=
+style5=
+style6=
+style7=
+style8=
+style9=
 
-# Don't show these items
+# Don't show these items.
 properties_to_hide=SecondaryColour,MarginL,MarginR
 
 # Max Items to Display
-max_item=20
+max_items=20
+
+# Sort styles by name.
+sort_by_name=yes
 ```
 
 # Key Bindings
