@@ -26,13 +26,13 @@ To install or update via command line:
 #### Windows 10 (CMD)
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/magnum357i/mpv-stylesmanager/HEAD/installers/windows.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/magnum357i/mpv-stylesmanager/HEAD/installers/windows.ps1 | iex"
 ```
 
 #### Linux
 
 ```bash
-curl -fsSL https://github.com/magnum357i/mpv-stylesmanager/HEAD/installers/linux.sh | sh
+curl -fsSL https://raw.githubusercontent.com/magnum357i/mpv-stylesmanager/HEAD/installers/linux.sh | sh
 ```
 
 # Configuration
