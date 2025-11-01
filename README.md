@@ -9,12 +9,31 @@ Allows you to modify style properties in ASS subtitles. Want to resize dialogue 
 **Important: If inline tags are present, your changes will have no visible effect.**
 
 # Installation
+
+### Manual
+
 Place `scripts` and `script-opts` folders into your config directory.
 
-| OS                 | Location         |
-| ------------------ | ---------------- |
-| Windows            | `%appdata%/mpv/` |
-| GNU/Linux or macOS | `~/.config/mpv/` |
+| OS        | Location         |
+|-----------|------------------|
+| Windows   | `%appdata%/mpv/` |
+| GNU/Linux | `~/.config/mpv/` |
+
+### Automatic
+
+To install or update via command line:
+
+#### Windows 10 (CMD)
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/magnum357i/mpv-stylesmanager/HEAD/installers/windows.ps1 | iex"
+```
+
+#### Linux
+
+```bash
+curl -fsSL https://github.com/magnum357i/mpv-stylesmanager/HEAD/installers/linux.sh | sh
+```
 
 # Configuration
 ```ini
